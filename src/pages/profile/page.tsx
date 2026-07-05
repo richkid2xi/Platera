@@ -60,7 +60,7 @@ export default function MyProfile() {
   };
 
   return (
-    <div className="animate-fade-in max-w-3xl">
+    <div className="animate-fade-in">
       {toast && (
         <div className={`fixed top-20 right-6 z-50 px-5 py-3 rounded-lg shadow-lg toast-enter font-body text-sm whitespace-nowrap ${toast.includes('success') || toast.includes('updated') ? 'bg-secondary-500 text-white' : 'bg-red-500 text-white'}`}>
           <i className={`mr-2 ${toast.includes('success') || toast.includes('updated') ? 'ri-check-line' : 'ri-error-warning-line'}`}></i>{toast}

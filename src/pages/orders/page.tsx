@@ -9,11 +9,9 @@ import {
 } from '@/mocks/orders';
 import type { Order } from '@/mocks/orders';
 
-function OrderCard({ order, onAdvance }: { order: Order; onAdvance: () => void }) {
+function OrderCard({ order, onChangeStatus }: { order: Order; onChangeStatus: (status: Order['status']) => void }) {
   const waitMins = calculateWaitTime(order.createdAt);
   const waitInfo = getWaitTimeColor(waitMins);
-
-  const itemCount = order.items.reduce((sum, i) => sum + i.qty, 0);
 
   return (
     <div
@@ -88,14 +86,20 @@ function OrderCard({ order, onAdvance }: { order: Order; onAdvance: () => void }
       </div>
 
       {order.status !== 'Served' && (
-        <button
-          onClick={onAdvance}
-          className="w-full mt-1 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-        >
-          <i className="ri-arrow-right-line"></i>
-          Advance to{' '}
-          {orderColumns[orderColumns.indexOf(order.status) + 1] || 'Served'}
-        </button>
+        <div className="mt-1 pt-2 border-t border-background-100 dark:border-foreground-800">
+          <label className="block text-xs font-medium text-foreground-500 mb-1">Update Status</label>
+          <select
+            value={order.status}
+            onChange={(e) => onChangeStatus(e.target.value as Order['status'])}
+            className="w-full bg-background-50 dark:bg-foreground-800 border border-background-200 dark:border-foreground-700 text-foreground-900 dark:text-foreground-100 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block p-2 font-body cursor-pointer transition-colors hover:border-primary-300"
+          >
+            {orderColumns.map((col) => (
+              <option key={col} value={col}>
+                {col}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
     </div>
   );
@@ -138,18 +142,9 @@ export default function LiveOrders() {
   const [newOrderToast, setNewOrderToast] = useState<Order | null>(null);
   const [demoNewOrder, setDemoNewOrder] = useState(false);
 
-  const advanceOrder = (orderId: string) => {
+  const changeOrderStatus = (orderId: string, newStatus: Order['status']) => {
     setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          const currentIdx = orderColumns.indexOf(o.status);
-          const nextStatus = orderColumns[currentIdx + 1];
-          if (nextStatus) {
-            return { ...o, status: nextStatus };
-          }
-        }
-        return o;
-      })
+      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
   };
 
@@ -212,11 +207,11 @@ export default function LiveOrders() {
       </div>
 
       {/* Kanban Board */}
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      <div className="flex flex-col xl:flex-row gap-4 xl:overflow-x-auto pb-2" style={{ transform: "rotateX(180deg)" }}>
         {orderColumns.map((col) => {
           const colOrders = filteredOrders.filter((o) => o.status === col);
           return (
-            <div key={col} className="flex-shrink-0 w-[280px] flex flex-col gap-3">
+            <div key={col} className="w-full xl:flex-shrink-0 xl:w-[280px] flex flex-col gap-3" style={{ transform: "rotateX(180deg)" }}>
               {/* Column Header */}
               <div
                 className={`flex items-center justify-between px-3 py-2 rounded-lg ${
@@ -260,7 +255,7 @@ export default function LiveOrders() {
                     <OrderCard
                       key={order.id}
                       order={order}
-                      onAdvance={() => advanceOrder(order.id)}
+                      onChangeStatus={(newStatus) => changeOrderStatus(order.id, newStatus)}
                     />
                   ))
                 )}

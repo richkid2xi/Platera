@@ -441,19 +441,26 @@ export default function Inventory() {
                   </div>
 
                   {/* Actions */}
-                  <div className="md:col-span-1 flex justify-end gap-1.5">
-                    <button
-                      onClick={() => { setShowSell(item.id); setSellAmount(''); setSellPrice(''); }}
-                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-accent-500 text-white hover:bg-accent-600 transition-all cursor-pointer whitespace-nowrap font-body"
+                  <div className="md:col-span-1 flex justify-end">
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'sell') {
+                          setShowSell(item.id);
+                          setSellAmount('');
+                          setSellPrice('');
+                        } else if (val === 'restock') {
+                          setShowRestock(item.id);
+                          setRestockAmount('');
+                        }
+                      }}
+                      className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-background-50 dark:bg-foreground-800 text-foreground-700 dark:text-foreground-300 border border-background-200 dark:border-foreground-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary-500 font-body transition-colors hover:border-primary-300"
                     >
-                      <i className="ri-shopping-cart-line mr-1"></i>Sell
-                    </button>
-                    <button
-                      onClick={() => { setShowRestock(item.id); setRestockAmount(''); }}
-                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-all cursor-pointer whitespace-nowrap font-body"
-                    >
-                      <i className="ri-add-line mr-1"></i>Restock
-                    </button>
+                      <option value="" disabled>Sell or Restock</option>
+                      <option value="sell">Sell</option>
+                      <option value="restock">Restock</option>
+                    </select>
                   </div>
 
                   {/* Sell Modal */}

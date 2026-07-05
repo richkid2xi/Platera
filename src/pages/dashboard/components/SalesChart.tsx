@@ -56,8 +56,8 @@ export default function SalesChart() {
                 backgroundColor: 'var(--bg-card)',
                 color: 'var(--text-primary)',
               }}
-              formatter={(value: number) =>
-                view === 'revenue' ? [`GH₵ ${value.toLocaleString()}`, 'Revenue'] : [value, 'Orders']
+              formatter={(value) =>
+                view === 'revenue' ? [`GH₵ ${(value as number).toLocaleString()}`, 'Revenue'] : [(value as number), 'Orders']
               }
             />
             <Bar

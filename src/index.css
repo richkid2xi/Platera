@@ -1,10 +1,14 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  /* Background palette */
   --color-background-50: #fefcfb;
   --color-background-100: #f4f3ec;
   --color-background-200: #e5e4e7;
-  
+  --color-background-300: #d0cfd3;
+
+  /* Foreground / dark UI palette */
   --color-foreground-100: #f3f4f6;
   --color-foreground-200: #e5e7eb;
   --color-foreground-300: #d1d5db;
@@ -16,18 +20,20 @@
   --color-foreground-900: #1a1b1f;
   --color-foreground-950: #0d0e11;
 
-  --color-primary-50: #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
+  /* Primary - Orange (matches prototype #FF6B35) */
+  --color-primary-50:  #fff3ee;
+  --color-primary-100: #ffe4d1;
+  --color-primary-200: #ffca9f;
+  --color-primary-300: #ffa870;
+  --color-primary-400: #ff8549;
+  --color-primary-500: #ff6b35;
+  --color-primary-600: #e85020;
+  --color-primary-700: #c53d12;
+  --color-primary-800: #9c2f0e;
+  --color-primary-900: #7a260c;
 
-  --color-secondary-50: #f0fdf4;
+  /* Secondary - Green */
+  --color-secondary-50:  #f0fdf4;
   --color-secondary-100: #dcfce7;
   --color-secondary-200: #bbf7d0;
   --color-secondary-300: #86efac;
@@ -38,7 +44,8 @@
   --color-secondary-800: #166534;
   --color-secondary-900: #14532d;
 
-  --color-accent-50: #fdf4ff;
+  /* Accent - Purple/Pink */
+  --color-accent-50:  #fdf4ff;
   --color-accent-100: #fae8ff;
   --color-accent-200: #f5d0fe;
   --color-accent-300: #f0abfc;
@@ -49,17 +56,210 @@
   --color-accent-800: #86198f;
   --color-accent-900: #701a75;
 
-  --font-body: "Inter", sans-serif;
+  /* Fonts */
+  --font-body:    "Inter", sans-serif;
   --font-heading: "Outfit", sans-serif;
+}
+
+/* ─────────────── CSS CUSTOM PROPERTIES (for chart & misc) ─────────────── */
+:root {
+  --bg-page:        #fefcfb;
+  --bg-card:        #ffffff;
+  --bg-card-hover:  #f4f3ec;
+  --bg-sidebar:     #ffffff;
+  --bg-header:      #ffffff;
+  --text-primary:   #1a1b1f;
+  --text-secondary: #4b5563;
+  --text-muted:     #9ca3af;
+  --border-color:   #e5e4e7;
+  --border-light:   #e5e4e7;
+  --chart-grid:     #e5e4e7;
+  --scrollbar-thumb: #d4b39e;
+}
+
+.dark {
+  --bg-page:        #0d0e11;
+  --bg-card:        #1a1b1f;
+  --bg-card-hover:  #2d2f35;
+  --bg-sidebar:     #1a1b1f;
+  --bg-header:      #1a1b1f;
+  --text-primary:   #e6e6e8;
+  --text-secondary: #b0b2b7;
+  --text-muted:     #8a8d94;
+  --border-color:   #2d2f35;
+  --border-light:   #2d2f35;
+  --chart-grid:     #2d2f35;
+  --scrollbar-thumb: #43464d;
+}
+
+/* ─────────────── RESET & BASE ─────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
 }
 
 body {
   font-family: var(--font-body);
-  background-color: var(--color-background-50);
-  color: var(--color-foreground-900);
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
 }
 
-.dark body {
-  background-color: var(--color-foreground-950);
-  color: var(--color-foreground-100);
+#root {
+  display: block;
+  min-height: 100vh;
+  text-align: left;
+  border: none;
+  max-width: none;
+}
+
+/* ─────────────── SCROLLBAR ─────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─────────────── ANIMATIONS ─────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toastEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounceSlow {
+  0%, 100% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translateY(-16px);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+@keyframes floatY {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out both;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out both;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out both;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.25s ease-out both;
+}
+
+.toast-enter {
+  animation: toastEnter 0.3s ease-out both;
+}
+
+.animate-bounce-slow {
+  animation: bounceSlow 3s infinite;
+}
+
+.animate-float {
+  animation: floatY 4s ease-in-out infinite;
+}
+
+/* Stagger delays for list items */
+.stagger-1  { animation-delay: 0.05s; }
+.stagger-2  { animation-delay: 0.10s; }
+.stagger-3  { animation-delay: 0.15s; }
+.stagger-4  { animation-delay: 0.20s; }
+.stagger-5  { animation-delay: 0.25s; }
+.stagger-6  { animation-delay: 0.30s; }
+.stagger-7  { animation-delay: 0.35s; }
+.stagger-8  { animation-delay: 0.40s; }
+
+/* ─────────────── HOVER LIFT EFFECT ─────────────── */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.dark .hover-lift:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* ─────────────── MODAL BACKDROP ─────────────── */
+.modal-backdrop {
+  backdrop-filter: blur(2px);
 }

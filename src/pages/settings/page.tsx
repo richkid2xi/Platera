@@ -16,6 +16,22 @@ export default function Settings() {
   const [alertCategories, setAlertCategories] = useState<string[]>(['Proteins', 'Produce', 'Dry Goods']);
   const [testEmailSent, setTestEmailSent] = useState(false);
 
+  // Toggle states
+  const [paymentToggles, setPaymentToggles] = useState<Record<string, boolean>>({
+    cash: true,
+    momo: restaurantSettings.paymentMethods.momoEnabled,
+    card: true,
+    paystack: restaurantSettings.paymentMethods.paystackEnabled,
+  });
+
+  const [notificationToggles, setNotificationToggles] = useState<Record<string, boolean>>({
+    newOrderSound: restaurantSettings.notifications.newOrderSound,
+    newOrderNotify: restaurantSettings.notifications.newOrderNotify,
+    lowStockNotify: restaurantSettings.notifications.lowStockNotify,
+    negativeFeedbackNotify: restaurantSettings.notifications.negativeFeedbackNotify,
+    dailyReportEmail: restaurantSettings.notifications.dailyReportEmail,
+  });
+
   const tabs: { key: SettingTab; label: string; icon: string }[] = [
     { key: 'profile', label: 'Restaurant Profile', icon: 'ri-store-2-line' },
     { key: 'payments', label: 'Payments', icon: 'ri-bank-card-line' },
@@ -192,8 +208,11 @@ export default function Settings() {
                       <p className="text-xs text-foreground-400 font-body">{provider.description}</p>
                     </div>
                   </div>
-                  <button className="relative w-10 h-5 rounded-full bg-primary-500 cursor-pointer transition-all">
-                    <span className="absolute top-0.5 left-5 w-4 h-4 rounded-full bg-white shadow-sm transition-all"></span>
+                  <button 
+                    onClick={() => setPaymentToggles(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${paymentToggles[provider.id] ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-600'}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${paymentToggles[provider.id] ? 'translate-x-5' : 'translate-x-0'}`}></span>
                   </button>
                 </div>
               ))}
@@ -271,8 +290,11 @@ export default function Settings() {
                       <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">{item.label}</p>
                       <p className="text-xs text-foreground-400 font-body">{item.desc}</p>
                     </div>
-                    <button className="relative w-10 h-5 rounded-full bg-primary-500 cursor-pointer transition-all flex-shrink-0">
-                      <span className="absolute top-0.5 left-5 w-4 h-4 rounded-full bg-white shadow-sm transition-all"></span>
+                    <button 
+                      onClick={() => setNotificationToggles(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${notificationToggles[item.key] ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-600'}`}
+                    >
+                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${notificationToggles[item.key] ? 'translate-x-5' : 'translate-x-0'}`}></span>
                     </button>
                   </div>
                 ))}
@@ -298,9 +320,9 @@ export default function Settings() {
                   </div>
                   <button
                     onClick={() => setEmailAlertsEnabled(!emailAlertsEnabled)}
-                    className={`relative w-10 h-5 rounded-full transition-all duration-200 cursor-pointer flex-shrink-0 ${emailAlertsEnabled ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-700'}`}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${emailAlertsEnabled ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-600'}`}
                   >
-                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${emailAlertsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${emailAlertsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>
                 </div>
 

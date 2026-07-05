@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { staffMembers, allRoles, permissionLabels, permissionIcons, generatePassword } from '@/mocks/staff';
 import type { StaffMember, StaffRole, PermissionSet } from '@/mocks/staff';
 
-type DeleteStep = 'idle' | 'confirm' | null;
+type DeleteStep = 'idle' | 'confirm' | 'final' | null;
 
 export default function Staff() {
   const [staff, setStaff] = useState<StaffMember[]>(staffMembers);
@@ -97,6 +97,23 @@ export default function Staff() {
     return found ? found.icon : 'ri-user-line';
   };
 
+  // Assign a vivid gradient per member ID (cycles through 10 palettes)
+  const AVATAR_GRADIENTS = [
+    'from-primary-400 to-primary-600',
+    'from-violet-400 to-purple-600',
+    'from-teal-400 to-cyan-600',
+    'from-rose-400 to-pink-600',
+    'from-amber-400 to-orange-600',
+    'from-indigo-400 to-blue-600',
+    'from-emerald-400 to-green-600',
+    'from-fuchsia-400 to-accent-600',
+    'from-sky-400 to-blue-500',
+    'from-red-400 to-rose-600',
+  ];
+
+  const getAvatarGradient = (id: number) =>
+    AVATAR_GRADIENTS[(id - 1) % AVATAR_GRADIENTS.length];
+
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
@@ -160,8 +177,9 @@ export default function Staff() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full bg-background-100 dark:bg-foreground-800 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-foreground-500 font-heading">
+                  {/* Colorful gradient avatar */}
+                  <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${getAvatarGradient(member.id)} flex items-center justify-center flex-shrink-0 shadow-md`}>
+                    <span className="text-sm font-bold text-white font-heading drop-shadow">
                       {member.name.split(' ').map(n => n[0]).join('')}
                     </span>
                   </div>
@@ -316,6 +334,18 @@ export default function Staff() {
             </div>
 
             <div className="space-y-4 mb-6">
+              {/* Colorful avatar preview in modal */}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-background-50 dark:bg-foreground-800/50 border border-background-200 dark:border-foreground-800">
+                <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarGradient(showEditModal.id)} flex items-center justify-center flex-shrink-0 shadow-md`}>
+                  <span className="text-base font-bold text-white font-heading drop-shadow">
+                    {showEditModal.name.split(' ').map(n => n[0]).join('')}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-body">{showEditModal.name}</p>
+                  <p className="text-xs text-foreground-400 font-body">{showEditModal.email}</p>
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Name</label>
                 <input type="text" value={showEditModal.name} readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-900 dark:text-foreground-100 font-body cursor-not-allowed" />

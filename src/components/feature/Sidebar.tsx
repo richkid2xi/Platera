@@ -9,7 +9,7 @@ interface NavItem {
 }
 
 const mainNavItems: NavItem[] = [
-  { label: 'Dashboard', path: '/', icon: 'ri-dashboard-3-line' },
+  { label: 'Dashboard', path: '/dashboard', icon: 'ri-dashboard-3-line' },
   { label: 'Live Orders', path: '/orders', icon: 'ri-list-check-2', badge: 5 },
   { label: 'Menu Management', path: '/menu', icon: 'ri-restaurant-2-line' },
   { label: 'Tables', path: '/tables', icon: 'ri-layout-grid-line' },
@@ -32,7 +32,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
   const location = useLocation();
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
+    if (path === '/dashboard') return location.pathname === '/dashboard';
     return location.pathname.startsWith(path);
   };
 

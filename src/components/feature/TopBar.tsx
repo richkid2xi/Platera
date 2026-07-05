@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface TopBarProps {
   sidebarCollapsed: boolean;
@@ -10,9 +11,11 @@ interface TopBarProps {
 export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarProps) {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const { user, signOut } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showSignoutModal, setShowSignoutModal] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -149,20 +152,22 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
             className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-background-100 dark:hover:bg-foreground-800 transition-all cursor-pointer"
           >
             <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center">
-              <span className="text-white text-sm font-bold font-heading">KO</span>
+              <span className="text-white text-sm font-bold font-heading">
+                {user ? user.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() : 'U'}
+              </span>
             </div>
             <div className="hidden md:flex flex-col items-start">
-              <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">Kwame Owusu</span>
-              <span className="text-xs text-foreground-400 font-body">Owner</span>
+              <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">{user?.name ?? 'User'}</span>
+              <span className="text-xs text-foreground-400 font-body capitalize">{user?.staffRole ?? user?.role ?? 'Staff'}</span>
             </div>
             <i className="ri-arrow-down-s-line text-foreground-400 text-sm hidden md:block"></i>
           </button>
 
           {showProfile && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-foreground-900 rounded-lg border border-background-200 dark:border-foreground-800 shadow-lg overflow-hidden z-50 animate-fade-in-up">
+            <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-foreground-900 rounded-lg border border-background-200 dark:border-foreground-800 shadow-lg overflow-hidden z-50 animate-fade-in-up">
               <div className="px-4 py-3 border-b border-background-200 dark:border-foreground-800">
-                <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">Kwame Owusu</p>
-                <p className="text-xs text-foreground-400 font-body">owner@platera.app</p>
+                <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">{user?.name ?? 'User'}</p>
+                <p className="text-xs text-foreground-400 font-body truncate">{user?.email ?? ''}</p>
               </div>
               <div className="py-1">
                 <button onClick={() => { navigate('/profile'); setShowProfile(false); }} className="w-full px-4 py-2 text-sm text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 text-left cursor-pointer font-body whitespace-nowrap">
@@ -173,7 +178,7 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
                 </button>
               </div>
               <div className="border-t border-background-200 dark:border-foreground-800 py-1">
-                <button className="w-full px-4 py-2 text-sm text-red-500 hover:bg-red-50 text-left cursor-pointer font-body whitespace-nowrap">
+                <button onClick={() => { setShowSignoutModal(true); setShowProfile(false); }} className="w-full px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 text-left cursor-pointer font-body whitespace-nowrap">
                   <i className="ri-logout-box-r-line mr-2"></i> Sign Out
                 </button>
               </div>
@@ -181,6 +186,41 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
           )}
         </div>
       </div>
+
+      {/* Sign Out Confirmation Modal */}
+      {showSignoutModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 modal-backdrop" onClick={() => setShowSignoutModal(false)}></div>
+          <div className="relative bg-white dark:bg-foreground-900 rounded-2xl p-6 w-full max-w-sm shadow-xl animate-scale-in">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                <i className="ri-logout-box-r-line text-2xl text-red-500"></i>
+              </div>
+              <h3 className="text-lg font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-2">Sign Out</h3>
+              <p className="text-sm text-foreground-500 dark:text-foreground-400 font-body mb-6">Are you sure you want to sign out of Platera?</p>
+              
+              <div className="flex w-full gap-3">
+                <button 
+                  onClick={() => setShowSignoutModal(false)}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg border border-background-200 dark:border-foreground-800 text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer font-body"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowSignoutModal(false);
+                    signOut();
+                    navigate('/', { replace: true });
+                  }}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-all cursor-pointer font-body"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

@@ -58,19 +58,21 @@ const STATS = [
   { label: "Uptime", target: 99, suffix: "%", icon: "ri-flashlight-fill" },
 ];
 
-function StatCard({ label, target, suffix, display, icon, animate }: {
+function StatItem({ label, target, suffix, display, icon, animate }: {
   label: string; target: number; suffix: string; icon: string;
   display?: (v: number) => string; animate: boolean;
 }) {
   const value = useCountUp(target, 1800, animate);
   const shown = display ? display(value) : `${value.toLocaleString()}${suffix}`;
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex items-center gap-1.5">
-        <i className={`${icon} text-primary-300 text-xs`} />
-        <p className="text-[11px] text-white/50 uppercase tracking-wider font-medium">{label}</p>
+    <div className="flex items-center gap-4">
+      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+        <i className={`${icon} text-primary-300 text-sm`} />
       </div>
-      <p className="text-xl font-black text-white font-heading tabular-nums">{shown}</p>
+      <div>
+        <p className="text-lg font-black text-white font-heading tabular-nums leading-none">{shown}</p>
+        <p className="text-xs text-white/50 font-medium mt-0.5">{label}</p>
+      </div>
     </div>
   );
 }
@@ -151,8 +153,8 @@ export default function SignIn() {
   return (
     <div className="min-h-screen flex bg-background-50 dark:bg-foreground-950 font-body">
       {/* ══════════════════ LEFT PANEL — Shutter Animation ══════════════════ */}
-      <ShutterImagePanel className="hidden lg:flex lg:w-[52%] xl:w-[55%]">
-        <div className="flex flex-col justify-between h-full p-10 xl:p-12">
+      <ShutterImagePanel className="hidden lg:flex lg:w-[44%] xl:w-[46%]">
+        <div className="flex flex-col h-full p-8 xl:p-10 gap-6">
           {/* Logo watermark */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
@@ -164,24 +166,23 @@ export default function SignIn() {
           </div>
 
           {/* Hero headline */}
-          <div className="space-y-5">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white/90 text-xs font-semibold uppercase tracking-wider">
-              <span className="w-2 h-2 rounded-full bg-secondary-400 animate-pulse" />
-              Restaurant Management Platform
+          <div className="space-y-4 flex-1 flex flex-col justify-center">
+            <div className="inline-flex items-center gap-2 text-white/70 text-xs font-semibold uppercase tracking-widest">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
+              Restaurant Management System
             </div>
-            <h2 className="text-4xl xl:text-5xl font-black text-white font-heading leading-[1.1]">
+            <h2 className="text-3xl xl:text-4xl font-black text-white font-heading leading-[1.1]">
               Every great meal<br />
               starts with a{" "}
               <span className="text-primary-400">great system.</span>
             </h2>
-            <p className="text-white/65 text-base leading-relaxed max-w-md">
+            <p className="text-white/60 text-sm leading-relaxed max-w-md">
               Manage orders, tables, staff and inventory in real-time — all from one beautiful dashboard.
             </p>
 
-            {/* Animated stats row */}
-            <div ref={statsRef} className="grid grid-cols-4 gap-4 pt-2">
+            <div ref={statsRef} className="pt-1 grid grid-cols-2 gap-x-6 gap-y-4">
               {STATS.map((s) => (
-                <StatCard key={s.label} {...s} animate={statsVisible} />
+                <StatItem key={s.label} {...s} animate={statsVisible} />
               ))}
             </div>
           </div>
@@ -208,7 +209,7 @@ export default function SignIn() {
       </ShutterImagePanel>
 
       {/* ══════════════════ RIGHT PANEL ══════════════════ */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative overflow-y-auto bg-white dark:bg-foreground-950">
+      <main className="flex-1 flex flex-col items-center justify-center px-6 py-6 relative overflow-y-auto bg-white dark:bg-foreground-950">
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
@@ -220,7 +221,7 @@ export default function SignIn() {
 
         <div className="w-full max-w-[390px] animate-fade-in-up">
           {/* Mobile logo */}
-          <div className="flex lg:hidden items-center gap-2.5 mb-10">
+          <div className="flex lg:hidden items-center gap-2.5 mb-6">
             <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center">
               <img src="/favicon.png" alt="Platera Bowl" className="w-full h-full object-cover" />
             </div>
@@ -230,11 +231,15 @@ export default function SignIn() {
           </div>
 
           {/* Heading */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-black text-foreground-950 dark:text-foreground-50 font-heading tracking-tight mb-2">
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-6 h-0.5 rounded-full bg-primary-500" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary-500">Sign in</span>
+            </div>
+            <h1 className="text-2xl font-black text-foreground-950 dark:text-foreground-50 font-heading tracking-tight mb-1">
               Welcome back
             </h1>
-            <p className="text-foreground-500 dark:text-foreground-400">
+            <p className="text-sm text-foreground-500 dark:text-foreground-400">
               Sign in to your restaurant dashboard
             </p>
           </div>

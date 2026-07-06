@@ -30,19 +30,21 @@ const STATS = [
   { label: "Support", target: 24, suffix: "/7", display: () => "24/7", icon: "ri-headphone-fill" },
 ];
 
-function StatCard({ label, target, suffix, display, icon, animate }: {
+function StatItem({ label, target, suffix, display, icon, animate }: {
   label: string; target: number; suffix: string; icon: string;
   display?: (v: number) => string; animate: boolean;
 }) {
   const value = useCountUp(target, 1800, animate);
   const shown = display ? display(value) : `${value.toLocaleString()}${suffix}`;
   return (
-    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10">
-      <div className="flex items-center gap-2 mb-1">
-        <i className={`${icon} text-primary-400 text-sm`} />
+    <div className="flex items-center gap-4">
+      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+        <i className={`${icon} text-primary-300 text-sm`} />
       </div>
-      <p className="text-2xl font-black text-white font-heading tabular-nums">{shown}</p>
-      <p className="text-foreground-400 text-xs mt-0.5">{label}</p>
+      <div>
+        <p className="text-lg font-black text-white font-heading tabular-nums leading-none">{shown}</p>
+        <p className="text-xs text-white/50 font-medium mt-0.5">{label}</p>
+      </div>
     </div>
   );
 }
@@ -166,7 +168,7 @@ export default function SignUp() {
   return (
     <div className="min-h-screen flex bg-background-50 dark:bg-foreground-950 font-body relative overflow-hidden">
       {/* ── Left decorative panel ── */}
-      <ShutterImagePanel className="hidden lg:flex lg:w-[44%] xl:w-[48%] relative flex-col justify-between p-12 overflow-hidden">
+      <ShutterImagePanel className="hidden lg:flex lg:w-[40%] xl:w-[42%] relative flex-col p-8 xl:p-10 gap-6 overflow-hidden">
         {/* Accent orbs (optional extra styling over the images) */}
         <div className="absolute top-[-100px] right-[-60px] w-[360px] h-[360px] rounded-full bg-primary-500/20 blur-3xl pointer-events-none z-10" />
         <div className="absolute bottom-[-80px] left-[-40px] w-[300px] h-[300px] rounded-full bg-accent-500/15 blur-3xl pointer-events-none z-10" />
@@ -182,9 +184,9 @@ export default function SignUp() {
         </div>
 
         {/* Stats */}
-        <div className="relative z-20 space-y-8 mt-auto mb-8">
+        <div className="relative z-20 space-y-5 flex-1 flex flex-col justify-center">
           <div>
-            <h2 className="text-3xl xl:text-4xl font-black text-white font-heading leading-tight mb-4 drop-shadow-sm">
+            <h2 className="text-2xl xl:text-3xl font-black text-white font-heading leading-tight mb-2 drop-shadow-sm">
               Join thousands of
               <br />
               <span className="text-primary-400">restaurants</span> thriving
@@ -196,9 +198,9 @@ export default function SignUp() {
             </p>
           </div>
 
-          <div ref={statsRef} className="grid grid-cols-2 gap-4">
+          <div ref={statsRef} className="grid grid-cols-2 gap-x-6 gap-y-4">
             {STATS.map((s) => (
-              <StatCard key={s.label} {...s} animate={statsVisible} />
+              <StatItem key={s.label} {...s} animate={statsVisible} />
             ))}
           </div>
         </div>
@@ -223,7 +225,7 @@ export default function SignUp() {
       </ShutterImagePanel>
 
       {/* ── Right form panel ── */}
-      <main className="flex-1 flex flex-col items-center justify-start px-6 py-12 relative overflow-y-auto bg-white dark:bg-foreground-950">
+      <main className="flex-1 flex flex-col items-center justify-center px-6 py-6 relative overflow-y-auto bg-white dark:bg-foreground-950">
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
@@ -235,7 +237,7 @@ export default function SignUp() {
 
         <div className="w-full max-w-[420px] animate-fade-in-up my-auto">
           {/* Mobile logo */}
-          <div className="flex lg:hidden items-center gap-2.5 mb-10">
+          <div className="flex lg:hidden items-center gap-2.5 mb-6">
             <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center">
               <img src="/favicon.png" alt="Platera Bowl" className="w-full h-full object-cover" />
             </div>
@@ -245,22 +247,36 @@ export default function SignUp() {
           </div>
 
           {/* Header & Progress Indicator */}
-          <div className="mb-7">
-            <div className="flex items-center gap-1 mb-2">
-              <div className={`h-1.5 flex-1 rounded-full ${step >= 1 ? "bg-primary-500" : "bg-background-200 dark:bg-foreground-800"}`} />
-              <div className={`h-1.5 flex-1 rounded-full ${step >= 2 ? "bg-primary-500" : "bg-background-200 dark:bg-foreground-800"}`} />
-              <div className={`h-1.5 flex-1 rounded-full ${step >= 3 ? "bg-primary-500" : "bg-background-200 dark:bg-foreground-800"}`} />
+          <div className="mb-4">
+            {/* Step labels */}
+            <div className="flex items-center justify-between mb-1">
+              {["Personal info", "Restaurant info", "Payment"].map((label, idx) => (
+                <span
+                  key={label}
+                  className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                    step === idx + 1
+                      ? "text-primary-500"
+                      : step > idx + 1
+                      ? "text-foreground-400 dark:text-foreground-500"
+                      : "text-foreground-300 dark:text-foreground-700"
+                  } ${idx === 1 ? "text-center flex-1" : idx === 2 ? "text-right" : ""}`}
+                >
+                  {step === idx + 1 && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary-500 mr-1 mb-px align-middle animate-pulse" />}
+                  {label}
+                </span>
+              ))}
             </div>
-            <div className="flex justify-between text-[10px] font-bold text-primary-500 uppercase tracking-wider mb-4">
-              <span className={step >= 1 ? "opacity-100" : "opacity-50"}>Personal info</span>
-              <span className={step >= 2 ? "opacity-100 text-center flex-1" : "opacity-50 text-center flex-1"}>Restaurant info</span>
-              <span className={step >= 3 ? "opacity-100 text-right" : "opacity-50 text-right"}>Payment</span>
+            {/* Progress bar */}
+            <div className="flex items-center gap-1 mb-3">
+              <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${step >= 1 ? "bg-primary-500" : "bg-background-200 dark:bg-foreground-800"}`} />
+              <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${step >= 2 ? "bg-primary-500" : "bg-background-200 dark:bg-foreground-800"}`} />
+              <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${step >= 3 ? "bg-primary-500" : "bg-background-200 dark:bg-foreground-800"}`} />
             </div>
-            <h1 className="text-3xl font-black text-foreground-950 dark:text-foreground-50 font-heading tracking-tight mb-2">
-              {step === 1 ? "Create an account" : step === 2 ? "Tell us about your restaurant" : "Start your free trial"}
+            <h1 className="text-2xl font-black text-foreground-950 dark:text-foreground-50 font-heading tracking-tight mb-0.5">
+              {step === 1 ? "Create an account" : step === 2 ? "Your restaurant" : "Start your free trial"}
             </h1>
-            <p className="text-foreground-500 dark:text-foreground-400">
-              {step === 1 ? "Set up your owner profile to get started" : step === 2 ? "We'll tailor your dashboard to your business needs" : "No commitment. Cancel anytime."}
+            <p className="text-sm text-foreground-500 dark:text-foreground-400">
+              {step === 1 ? "Set up your owner profile to get started" : step === 2 ? "We'll tailor your dashboard to your business" : "No commitment. Cancel anytime."}
             </p>
           </div>
 

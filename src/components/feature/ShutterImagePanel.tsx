@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// ── Images that cycle ──────────────────────────────────────────────
-// Using Unsplash direct-embed URLs (no key needed, works from browser)
 const IMAGES = [
-  'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=900&q=80&fit=crop',
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=900&q=80&fit=crop',
-  'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=900&q=80&fit=crop',
-  'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=900&q=80&fit=crop',
-  'https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?w=900&q=80&fit=crop',
+  '/images/auth-shutter-1.jpg',
+  '/images/auth-shutter-2.jpg',
+  '/images/auth-shutter-3.jpg',
+  '/images/auth-shutter-4.jpg',
+  '/images/auth-shutter-5.jpg',
+  '/images/auth-shutter-6.jpg',
 ];
 
 const SLAT_COUNT = 10;           // number of vertical blinds strips
@@ -75,6 +74,8 @@ export default function ShutterImagePanel({ children, className = '' }: ShutterI
         />
         <div className="absolute inset-0 bg-gradient-to-t from-foreground-950 via-foreground-950/70 to-foreground-950/30" />
         <div className="absolute inset-0 bg-gradient-to-br from-primary-950/20 via-transparent to-transparent" />
+        {/* Right-edge vignette — darkens the photo edge, looks natural in both light & dark */}
+        <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-r from-transparent to-foreground-950/70" />
       </div>
 
       {/* Shutter layer — vertical slats */}

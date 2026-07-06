@@ -22,6 +22,23 @@ export const salesData = {
     { name: 'Starters', value: 15, color: '#4DB696' },
     { name: 'Desserts', value: 10, color: '#BA9174' },
   ],
+  paymentMethods: [
+    { method: 'Cash', value: 45, color: '#10B981' },
+    { method: 'Card / POS', value: 35, color: '#3B82F6' },
+    { method: 'Mobile Money', value: 20, color: '#F59E0B' },
+  ],
+  staffPerformance: [
+    { id: 1, name: 'Kwame Mensah', orders: 85, revenue: 'GH₵ 8,750', rating: 4.8 },
+    { id: 2, name: 'Akua Daniels', orders: 72, revenue: 'GH₵ 7,420', rating: 4.9 },
+    { id: 3, name: 'John Osei', orders: 64, revenue: 'GH₵ 6,500', rating: 4.6 },
+    { id: 4, name: 'Grace Addo', orders: 55, revenue: 'GH₵ 5,800', rating: 4.7 },
+  ],
+  financialSummary: {
+    grossRevenue: 'GH₵ 34,500',
+    discounts: 'GH₵ 1,200',
+    taxes: 'GH₵ 2,100',
+    netRevenue: 'GH₵ 31,200',
+  },
   tablePerformance: [
     { table: 'Table 1', orders: 38, revenue: 'GH₵ 3,920' },
     { table: 'Table 2', orders: 42, revenue: 'GH₵ 4,330' },
@@ -42,6 +59,13 @@ export const salesData = {
     { id: 7, name: 'Red Red', category: 'Mains', quantity: 18, revenue: 'GH₵ 720', trend: '+6%' },
     { id: 8, name: 'Fried Yam', category: 'Starters', quantity: 22, revenue: 'GH₵ 330', trend: '-2%' },
   ],
+  recentTransactions: [
+    { id: 101, item: 'Club Beer (Crate)', qty: 3, total: 'GH₵ 360', time: '14:25', status: 'Completed' },
+    { id: 102, item: 'Chicken (Whole)', qty: 2, total: 'GH₵ 220', time: '13:10', status: 'Completed' },
+    { id: 103, item: 'Onions (Bag)', qty: 1, total: 'GH₵ 55', time: '12:40', status: 'Pending' },
+    { id: 104, item: 'Fanta (Bottle)', qty: 5, total: 'GH₵ 60', time: '11:15', status: 'Completed' },
+    { id: 105, item: 'Beef (Fresh Cut)', qty: 3, total: 'GH₵ 240', time: '09:30', status: 'Completed' },
+  ],
   summary: {
     totalRevenue: 'GH₵ 31,200',
     totalOrders: 304,
@@ -61,5 +85,4 @@ export const dateRangeOptions = [
   { label: 'This Month', value: 'month' },
   { label: 'Last 7 Days', value: '7days' },
   { label: 'Last 30 Days', value: '30days' },
-  { label: 'Custom Range', value: 'custom' },
 ];

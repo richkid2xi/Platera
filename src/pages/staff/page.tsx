@@ -1,10 +1,22 @@
 import { useState } from 'react';
+import PageHeader from '@/components/base/PageHeader';
+import PageSkeleton from '@/components/base/PageSkeleton';
+import CustomSelect from '@/components/base/CustomSelect';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRefresh } from '@/contexts/RefreshContext';
+import { useOnboarding } from '@/contexts/OnboardingContext';
 import { staffMembers, allRoles, permissionLabels, permissionIcons, generatePassword } from '@/mocks/staff';
 import type { StaffMember, StaffRole, PermissionSet } from '@/mocks/staff';
 
 type DeleteStep = 'idle' | 'confirm' | 'final' | null;
 
 export default function Staff() {
+  const { user } = useAuth();
+  const { isRefreshing } = useRefresh();
+  const { markStepComplete } = useOnboarding();
+  const isManager = user?.role === 'manager';
+  const assignableRoles = isManager ? allRoles.filter(r => r.role !== 'Owner' && r.role !== 'Manager') : allRoles;
+
   const [staff, setStaff] = useState<StaffMember[]>(staffMembers);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
@@ -17,8 +29,12 @@ export default function Staff() {
   // Add form state
   const [addName, setAddName] = useState('');
   const [addEmail, setAddEmail] = useState('');
-  const [addRole, setAddRole] = useState<StaffRole>('Waitress');
+  const [addRole, setAddRole] = useState<StaffRole | string>('Waitress');
+  const [isCustomRole, setIsCustomRole] = useState(false);
+  const [addPermissions, setAddPermissions] = useState<PermissionSet>(allRoles.find(r => r.role === 'Waitress')!.permissions);
   const [generatedPwd, setGeneratedPwd] = useState('');
+  const [newStaffCredentials, setNewStaffCredentials] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [pwdCopied, setPwdCopied] = useState(false);
 
   const uniqueRoles = ['All', ...Array.from(new Set(staff.map(s => s.role)))];
 
@@ -43,20 +59,27 @@ export default function Staff() {
       id: Math.max(...staff.map(s => s.id)) + 1,
       name: addName,
       email: addEmail,
-      role: addRole,
+      role: addRole as StaffRole,
       status: 'active',
       joinedDate: new Date().toISOString().split('T')[0],
       lastLogin: new Date().toISOString(),
       generatedPassword: generatedPwd,
       firstLogin: true,
     };
+    const savedName = addName;
+    const savedPwd = generatedPwd;
+    const savedEmail = addEmail;
     setStaff((prev) => [...prev, newMember]);
     setShowAddModal(false);
     setAddName('');
     setAddEmail('');
     setAddRole('Waitress');
+    setIsCustomRole(false);
+    setAddPermissions(allRoles.find(r => r.role === 'Waitress')!.permissions);
     setGeneratedPwd('');
-    showToast(`${addName} has been added! Generated password: ${generatedPwd}`);
+    setPwdCopied(false);
+    setNewStaffCredentials({ name: savedName, email: savedEmail, password: savedPwd });
+    markStepComplete('invite_staff');
   };
 
   const handleDeleteStaff = () => {
@@ -83,6 +106,10 @@ export default function Staff() {
   const togglePermission = (key: keyof PermissionSet) => {
     if (!editPermissions) return;
     setEditPermissions((prev) => prev ? { ...prev, [key]: !prev[key] } : null);
+  };
+
+  const toggleAddPermission = (key: keyof PermissionSet) => {
+    setAddPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const getRoleColor = (role: string) => {
@@ -116,29 +143,30 @@ export default function Staff() {
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+  if (isRefreshing) return <PageSkeleton />;
+
   return (
-    <div className="animate-fade-in">
+    <div className="flex flex-col gap-6 animate-fade-in">
       {toast && (
         <div className="fixed top-20 right-6 z-50 bg-secondary-500 text-white px-5 py-3 rounded-lg shadow-lg toast-enter font-body text-sm whitespace-nowrap max-w-sm">
           <i className="ri-check-line mr-2"></i>{toast}
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground-950 dark:text-foreground-100 font-heading">Staff Management</h1>
-          <p className="text-sm text-foreground-500 dark:text-foreground-400 mt-1 font-body">Manage team members, roles, and access permissions</p>
-        </div>
+      <PageHeader
+        title="Staff Management"
+        description="Manage team members, roles, and access permissions"
+      >
         <button
           onClick={() => setShowAddModal(true)}
           className="px-4 py-2.5 text-sm font-semibold rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-all cursor-pointer whitespace-nowrap font-body"
         >
           <i className="ri-user-add-line mr-1.5"></i>Add Staff
         </button>
-      </div>
+      </PageHeader>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-sm">
           <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-foreground-400 text-sm"></i>
           <input
@@ -149,15 +177,13 @@ export default function Staff() {
             className="w-full pl-9 pr-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 placeholder:text-foreground-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 font-body transition-all"
           />
         </div>
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 cursor-pointer font-body"
-        >
-          {uniqueRoles.map((r) => (
-            <option key={r} value={r}>{r === 'All' ? 'All Roles' : r}</option>
-          ))}
-        </select>
+        <div className="w-full sm:w-48">
+          <CustomSelect
+            value={roleFilter}
+            onChange={(val) => setRoleFilter(val)}
+            options={uniqueRoles.map(r => ({ label: r === 'All' ? 'All Roles' : r, value: r }))}
+          />
+        </div>
       </div>
 
       {/* Staff Grid */}
@@ -215,18 +241,26 @@ export default function Staff() {
               )}
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => openEditModal(member)}
-                  className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-background-100 dark:bg-foreground-800 text-foreground-600 dark:text-foreground-300 hover:bg-background-200 dark:hover:bg-foreground-700 transition-all cursor-pointer whitespace-nowrap font-body"
-                >
-                  <i className="ri-edit-line mr-1"></i>Edit
-                </button>
-                <button
-                  onClick={() => setDeleteTarget({ member, step: 'confirm' })}
-                  className="px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition-all cursor-pointer whitespace-nowrap font-body"
-                >
-                  <i className="ri-delete-bin-line mr-1"></i>Delete
-                </button>
+                {(!isManager || (member.role !== 'Owner' && member.role !== 'Manager')) ? (
+                  <>
+                    <button
+                      onClick={() => openEditModal(member)}
+                      className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-background-100 dark:bg-foreground-800 text-foreground-600 dark:text-foreground-300 hover:bg-background-200 dark:hover:bg-foreground-700 transition-all cursor-pointer whitespace-nowrap font-body"
+                    >
+                      <i className="ri-edit-line mr-1"></i>Edit
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget({ member, step: 'confirm' })}
+                      className="px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition-all cursor-pointer whitespace-nowrap font-body"
+                    >
+                      <i className="ri-delete-bin-line mr-1"></i>Delete
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-background-50 dark:bg-foreground-800/50 text-foreground-400 text-center font-body cursor-not-allowed border border-background-200 dark:border-foreground-700">
+                    <i className="ri-lock-line mr-1"></i>Restricted
+                  </div>
+                )}
               </div>
             </div>
           ))
@@ -237,7 +271,7 @@ export default function Staff() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[10vh]">
           <div className="absolute inset-0 bg-black/40 modal-backdrop" onClick={() => { setShowAddModal(false); setGeneratedPwd(''); }}></div>
-          <div className="relative bg-white dark:bg-foreground-900 rounded-2xl p-6 w-full max-w-md shadow-xl animate-scale-in max-h-[85vh] overflow-y-auto">
+          <div className="relative bg-white dark:bg-foreground-900 rounded-2xl p-6 w-full max-w-2xl shadow-xl animate-scale-in max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-bold text-foreground-950 dark:text-foreground-100 font-heading">Add New Staff</h3>
               <button onClick={() => { setShowAddModal(false); setGeneratedPwd(''); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-foreground-400 hover:bg-background-100 dark:hover:bg-foreground-800 transition-all cursor-pointer">
@@ -245,72 +279,117 @@ export default function Staff() {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Full Name</label>
-                <input
-                  type="text"
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
-                  placeholder="e.g. Adwoa Mensah"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Email Address</label>
-                <input
-                  type="email"
-                  value={addEmail}
-                  onChange={(e) => setAddEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
-                  placeholder="e.g. adwoa@platera.app"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Role</label>
-                <select
-                  value={addRole}
-                  onChange={(e) => setAddRole(e.target.value as StaffRole)}
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 cursor-pointer font-body"
-                >
-                  {allRoles.map((r) => (
-                    <option key={r.role} value={r.role}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Full Name</label>
+                  <input
+                    type="text"
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
+                    placeholder="e.g. Adwoa Mensah"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Email Address</label>
+                  <input
+                    type="email"
+                    value={addEmail}
+                    onChange={(e) => setAddEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
+                    placeholder="e.g. adwoa@platera.app"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Role</label>
+                  <CustomSelect
+                    value={isCustomRole ? 'Custom' : addRole}
+                    onChange={(val) => {
+                      if (val === 'Custom') {
+                        setIsCustomRole(true);
+                      } else {
+                        setIsCustomRole(false);
+                        setAddRole(val as StaffRole);
+                        const roleDef = allRoles.find(r => r.role === val);
+                        if (roleDef) setAddPermissions({ ...roleDef.permissions });
+                      }
+                    }}
+                    options={[
+                      ...assignableRoles.map((r) => ({ label: r.label, value: r.role })),
+                      { label: 'Add Custom Role...', value: 'Custom' }
+                    ]}
+                  />
+                  {isCustomRole && (
+                    <input
+                      type="text"
+                      placeholder="Enter custom role"
+                      value={addRole}
+                      onChange={(e) => setAddRole(e.target.value)}
+                      className="w-full mt-2 px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
+                    />
+                  )}
+                </div>
 
-              <div className="p-4 rounded-xl bg-background-50 dark:bg-foreground-800/50 border border-background-200 dark:border-foreground-800">
-                <p className="text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-2 font-body">Temporary Password</p>
-                {generatedPwd ? (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <code className="flex-1 px-3 py-2 bg-white dark:bg-foreground-900 rounded-lg text-sm font-mono text-foreground-900 dark:text-foreground-100 border border-background-200 dark:border-foreground-700 break-all">
-                        {generatedPwd}
-                      </code>
-                      <button
-                        onClick={() => { navigator.clipboard.writeText(generatedPwd); showToast('Password copied!'); }}
-                        className="px-3 py-2 text-xs font-semibold rounded-lg bg-background-200 dark:bg-foreground-700 text-foreground-600 dark:text-foreground-300 hover:bg-background-300 transition-all cursor-pointer whitespace-nowrap font-body"
-                      >
-                        <i className="ri-file-copy-line"></i>
+                <div className="p-4 rounded-xl bg-background-50 dark:bg-foreground-800/50 border border-background-200 dark:border-foreground-800">
+                  <p className="text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-2 font-body">Temporary Password</p>
+                  {generatedPwd ? (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <code className="flex-1 px-3 py-2 bg-white dark:bg-foreground-900 rounded-lg text-sm font-mono text-foreground-900 dark:text-foreground-100 border border-background-200 dark:border-foreground-700 break-all">
+                          {generatedPwd}
+                        </code>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(generatedPwd); showToast('Password copied!'); }}
+                          className="px-3 py-2 text-xs font-semibold rounded-lg bg-background-200 dark:bg-foreground-700 text-foreground-600 dark:text-foreground-300 hover:bg-background-300 transition-all cursor-pointer whitespace-nowrap font-body"
+                        >
+                          <i className="ri-file-copy-line"></i>
+                        </button>
+                      </div>
+                      <button onClick={handleGeneratePassword} className="text-xs text-primary-500 hover:text-primary-600 font-semibold cursor-pointer font-body whitespace-nowrap">
+                        <i className="ri-refresh-line mr-1"></i>Generate New Password
                       </button>
                     </div>
-                    <button onClick={handleGeneratePassword} className="text-xs text-primary-500 hover:text-primary-600 font-semibold cursor-pointer font-body whitespace-nowrap">
-                      <i className="ri-refresh-line mr-1"></i>Generate New Password
+                  ) : (
+                    <button
+                      onClick={handleGeneratePassword}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-all cursor-pointer whitespace-nowrap font-body"
+                    >
+                      <i className="ri-key-2-line mr-1.5"></i>Generate Password
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleGeneratePassword}
-                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-all cursor-pointer whitespace-nowrap font-body"
-                  >
-                    <i className="ri-key-2-line mr-1.5"></i>Generate Password
-                  </button>
-                )}
+                  )}
+                </div>
+
+                <p className="text-xs text-foreground-400 font-body">
+                  The staff member will be prompted to change this password on their first login.
+                </p>
               </div>
 
-              <p className="text-xs text-foreground-400 font-body">
-                The staff member will be prompted to change this password on their first login.
-              </p>
+              <div className="space-y-4">
+                <div className="mb-2">
+                  <h4 className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-heading mb-3">Feature Permissions</h4>
+                  <p className="text-xs text-foreground-400 mb-3 font-body">Toggle which features this staff member can access.</p>
+                  <div className="space-y-1.5">
+                    {(Object.keys(addPermissions) as Array<keyof PermissionSet>).map((key) => (
+                      <label key={key} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-background-50 dark:hover:bg-foreground-800/50 cursor-pointer transition-colors">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-md bg-background-100 dark:bg-foreground-800 flex items-center justify-center">
+                            <i className={`${permissionIcons[key]} text-xs text-foreground-500`}></i>
+                          </div>
+                          <span className="text-sm text-foreground-700 dark:text-foreground-300 font-body">{permissionLabels[key]}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); toggleAddPermission(key); }}
+                          className={`relative w-10 h-5 rounded-full transition-all cursor-pointer ${addPermissions[key] ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-700'}`}
+                        >
+                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${addPermissions[key] ? 'left-5' : 'left-0.5'}`}></span>
+                        </button>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -325,7 +404,7 @@ export default function Staff() {
       {showEditModal && editPermissions && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[8vh]">
           <div className="absolute inset-0 bg-black/40 modal-backdrop" onClick={() => { setShowEditModal(null); setEditPermissions(null); }}></div>
-          <div className="relative bg-white dark:bg-foreground-900 rounded-2xl p-6 w-full max-w-lg shadow-xl animate-scale-in max-h-[88vh] overflow-y-auto">
+          <div className="relative bg-white dark:bg-foreground-900 rounded-2xl p-6 w-full max-w-2xl shadow-xl animate-scale-in max-h-[88vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-bold text-foreground-950 dark:text-foreground-100 font-heading">Edit Staff Member</h3>
               <button onClick={() => { setShowEditModal(null); setEditPermissions(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-foreground-400 hover:bg-background-100 dark:hover:bg-foreground-800 transition-all cursor-pointer">
@@ -333,83 +412,81 @@ export default function Staff() {
               </button>
             </div>
 
-            <div className="space-y-4 mb-6">
-              {/* Colorful avatar preview in modal */}
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-background-50 dark:bg-foreground-800/50 border border-background-200 dark:border-foreground-800">
-                <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarGradient(showEditModal.id)} flex items-center justify-center flex-shrink-0 shadow-md`}>
-                  <span className="text-base font-bold text-white font-heading drop-shadow">
-                    {showEditModal.name.split(' ').map(n => n[0]).join('')}
-                  </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-4 mb-6">
+                {/* Colorful avatar preview in modal */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-background-50 dark:bg-foreground-800/50 border border-background-200 dark:border-foreground-800">
+                  <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarGradient(showEditModal.id)} flex items-center justify-center flex-shrink-0 shadow-md`}>
+                    <span className="text-base font-bold text-white font-heading drop-shadow">
+                      {showEditModal.name.split(' ').map(n => n[0]).join('')}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-body">{showEditModal.name}</p>
+                    <p className="text-xs text-foreground-400 font-body">{showEditModal.email}</p>
+                  </div>
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-body">{showEditModal.name}</p>
-                  <p className="text-xs text-foreground-400 font-body">{showEditModal.email}</p>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Name</label>
+                  <input type="text" value={showEditModal.name} readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-900 dark:text-foreground-100 font-body cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Email</label>
+                  <input type="email" value={showEditModal.email} readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-900 dark:text-foreground-100 font-body cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Role</label>
+                  <CustomSelect
+                    value={showEditModal.role}
+                    onChange={(val) => {
+                      const newRole = val as StaffRole;
+                      setShowEditModal({ ...showEditModal, role: newRole });
+                      const roleDef = allRoles.find(r => r.role === newRole);
+                      setEditPermissions(roleDef ? { ...roleDef.permissions } : null);
+                    }}
+                    options={assignableRoles.map((r) => ({ label: r.label, value: r.role }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Status</label>
+                  <CustomSelect
+                    value={showEditModal.status}
+                    onChange={(val) => setShowEditModal({ ...showEditModal, status: val as 'active' | 'inactive' })}
+                    options={[
+                      { label: 'Active', value: 'active' },
+                      { label: 'Inactive', value: 'inactive' }
+                    ]}
+                  />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Name</label>
-                <input type="text" value={showEditModal.name} readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-900 dark:text-foreground-100 font-body cursor-not-allowed" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Email</label>
-                <input type="email" value={showEditModal.email} readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-900 dark:text-foreground-100 font-body cursor-not-allowed" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Role</label>
-                <select
-                  value={showEditModal.role}
-                  onChange={(e) => {
-                    const newRole = e.target.value as StaffRole;
-                    setShowEditModal({ ...showEditModal, role: newRole });
-                    const roleDef = allRoles.find(r => r.role === newRole);
-                    setEditPermissions(roleDef ? { ...roleDef.permissions } : null);
-                  }}
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 cursor-pointer font-body"
-                >
-                  {allRoles.map((r) => (
-                    <option key={r.role} value={r.role}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Status</label>
-                <select
-                  value={showEditModal.status}
-                  onChange={(e) => setShowEditModal({ ...showEditModal, status: e.target.value as 'active' | 'inactive' })}
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 cursor-pointer font-body"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-            </div>
 
-            {/* Permission Toggles */}
-            <div className="mb-6">
-              <h4 className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-heading mb-3">Feature Permissions</h4>
-              <p className="text-xs text-foreground-400 mb-3 font-body">Toggle which features this staff member can access. Role presets will be overridden by manual changes.</p>
-              <div className="space-y-1.5">
-                {(Object.keys(editPermissions) as Array<keyof PermissionSet>).map((key) => (
-                  <label key={key} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-background-50 dark:hover:bg-foreground-800/50 cursor-pointer transition-colors">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-md bg-background-100 dark:bg-foreground-800 flex items-center justify-center">
-                        <i className={`${permissionIcons[key]} text-xs text-foreground-500`}></i>
+              {/* Permission Toggles */}
+              <div className="mb-6">
+                <h4 className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-heading mb-3">Feature Permissions</h4>
+                <p className="text-xs text-foreground-400 mb-3 font-body">Toggle which features this staff member can access. Role presets will be overridden by manual changes.</p>
+                <div className="space-y-1.5">
+                  {(Object.keys(editPermissions) as Array<keyof PermissionSet>).map((key) => (
+                    <label key={key} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-background-50 dark:hover:bg-foreground-800/50 cursor-pointer transition-colors">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-md bg-background-100 dark:bg-foreground-800 flex items-center justify-center">
+                          <i className={`${permissionIcons[key]} text-xs text-foreground-500`}></i>
+                        </div>
+                        <span className="text-sm text-foreground-700 dark:text-foreground-300 font-body">{permissionLabels[key]}</span>
                       </div>
-                      <span className="text-sm text-foreground-700 dark:text-foreground-300 font-body">{permissionLabels[key]}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); togglePermission(key); }}
-                      className={`relative w-10 h-5 rounded-full transition-all cursor-pointer ${editPermissions[key] ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-700'}`}
-                    >
-                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${editPermissions[key] ? 'left-5' : 'left-0.5'}`}></span>
-                    </button>
-                  </label>
-                ))}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); togglePermission(key); }}
+                        className={`relative w-10 h-5 rounded-full transition-all cursor-pointer ${editPermissions[key] ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-700'}`}
+                      >
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${editPermissions[key] ? 'left-5' : 'left-0.5'}`}></span>
+                      </button>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 mt-4">
               <button onClick={() => { setShowEditModal(null); setEditPermissions(null); }} className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg border border-background-200 dark:border-foreground-800 text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer whitespace-nowrap font-body">Cancel</button>
               <button onClick={handleSaveEdit} className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-all cursor-pointer whitespace-nowrap font-body">Save Changes</button>
             </div>
@@ -457,6 +534,62 @@ export default function Staff() {
               <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg border border-background-200 dark:border-foreground-800 text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer whitespace-nowrap font-body">Cancel</button>
               <button onClick={handleDeleteStaff} className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition-all cursor-pointer whitespace-nowrap font-body">Permanently Delete</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Added Success Modal — show generated credentials */}
+      {newStaffCredentials && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 modal-backdrop"></div>
+          <div className="relative bg-white dark:bg-foreground-900 rounded-2xl p-6 w-full max-w-sm shadow-xl animate-scale-in">
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="w-14 h-14 rounded-2xl bg-secondary-50 dark:bg-secondary-900/20 flex items-center justify-center mb-4">
+                <i className="ri-user-add-line text-2xl text-secondary-500"></i>
+              </div>
+              <h3 className="text-lg font-bold text-foreground-950 dark:text-foreground-100 font-heading">Staff Member Added!</h3>
+              <p className="text-sm text-foreground-500 mt-1 font-body">
+                <strong className="text-foreground-800 dark:text-foreground-200">{newStaffCredentials.name}</strong> has been added. Share their login credentials securely.
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-5">
+              <div className="bg-background-50 dark:bg-foreground-800 rounded-lg p-3">
+                <p className="text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider font-body mb-1">Email</p>
+                <p className="text-sm font-mono text-foreground-900 dark:text-foreground-100">{newStaffCredentials.email}</p>
+              </div>
+              <div className="bg-background-50 dark:bg-foreground-800 rounded-lg p-3">
+                <p className="text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider font-body mb-1">Temporary Password</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-mono font-bold text-foreground-900 dark:text-foreground-100 tracking-widest">{newStaffCredentials.password}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(newStaffCredentials.password);
+                      setPwdCopied(true);
+                      setTimeout(() => setPwdCopied(false), 2000);
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${pwdCopied ? 'bg-secondary-500 text-white' : 'bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600'}`}
+                  >
+                    <i className={pwdCopied ? 'ri-check-line' : 'ri-clipboard-line'}></i>
+                    {pwdCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg px-3 py-2.5 mb-5 flex gap-2">
+              <i className="ri-alert-line text-amber-600 dark:text-amber-400 text-sm flex-shrink-0 mt-0.5"></i>
+              <p className="text-xs text-amber-700 dark:text-amber-300 font-body">
+                This password will not be shown again. Ask the staff member to change it on first login.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setNewStaffCredentials(null)}
+              className="w-full px-4 py-2.5 text-sm font-semibold rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-all cursor-pointer font-body"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}

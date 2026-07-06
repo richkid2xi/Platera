@@ -1,6 +1,11 @@
 import { useState } from 'react';
+import PageSkeleton from '@/components/base/PageSkeleton';
+import { useRefresh } from '@/contexts/RefreshContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function MyProfile() {
+  const { isRefreshing } = useRefresh();
+  const { user } = useAuth();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -8,13 +13,13 @@ export default function MyProfile() {
   const [toast, setToast] = useState('');
 
   const profileData = {
-    name: 'Kwame Owusu',
-    email: 'kwame@platera.app',
-    role: 'Owner',
+    name: user?.name ?? 'Unknown User',
+    email: user?.email ?? '',
+    role: user?.staffRole ?? user?.role ?? 'Staff',
     phone: '+233 24 123 4567',
     joinedDate: '2026-01-15',
     lastLogin: '2026-07-03T08:30:00',
-    avatar: 'KO',
+    avatar: (user?.name ?? 'U').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
   };
 
   const activityLog = [
@@ -58,6 +63,8 @@ export default function MyProfile() {
     const date = new Date(d);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
+
+  if (isRefreshing) return <PageSkeleton />;
 
   return (
     <div className="animate-fade-in">

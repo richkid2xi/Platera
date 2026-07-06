@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useUnsavedChanges } from '@/contexts/UnsavedChangesContext';
+import PageHeader from '@/components/base/PageHeader';
+import PageSkeleton from '@/components/base/PageSkeleton';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRefresh } from '@/contexts/RefreshContext';
 import { QRCodeCanvas } from 'qrcode.react';
-import { tables as initialTables, tableStatusConfig } from '@/mocks/tablets';
+import { useOnboarding } from '@/contexts/OnboardingContext';
+import { tables as initialTables, generateTableToken } from '@/mocks/tablets';
 import type { Table } from '@/mocks/tablets';
-import { orders } from '@/mocks/orders';
 
 function TableTile({
   table,
@@ -11,55 +17,121 @@ function TableTile({
   table: Table;
   onClick: (table: Table) => void;
 }) {
-  const config = tableStatusConfig[table.status];
   return (
     <button
       onClick={() => onClick(table)}
-      className={`relative rounded-xl border p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.03] hover:shadow-md ${config.bg} ${config.border} animate-fade-in-up`}
+      className="relative rounded-xl border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.03] hover:shadow-md animate-fade-in-up"
     >
-      <div className="w-10 h-10 rounded-full bg-white dark:bg-foreground-800 flex items-center justify-center shadow-sm">
-        <i className={`${config.icon} text-lg`}></i>
+      <div className="w-10 h-10 rounded-full bg-secondary-50 dark:bg-secondary-900/20 flex items-center justify-center shadow-sm">
+        <i className="ri-restaurant-line text-secondary-500 text-lg"></i>
       </div>
-      <span className={`text-lg font-bold font-heading ${config.text}`}>Table {table.number}</span>
-      <span className={`text-xs font-medium ${config.text}`}>{config.label}</span>
-      {table.currentOrderTotal && (
-        <span className="text-xs font-bold text-foreground-700 dark:text-foreground-300 mt-0.5">
-          GH₵ {table.currentOrderTotal}
-        </span>
-      )}
-      {table.status === 'Occupied' && table.currentOrderId && (
-        <span className="text-[10px] text-foreground-400 font-body">{table.currentOrderId}</span>
-      )}
-      <span className="text-[10px] text-foreground-400 font-body">{table.seats} seats</span>
+      <span className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading">
+        Table {table.number}
+      </span>
+      <span className="text-xs font-medium text-foreground-500 font-body">
+        {table.seats} seats
+      </span>
     </button>
   );
 }
 
 export default function Tables() {
+  const { user } = useAuth();
+  const { isRefreshing } = useRefresh();
+  const { markStepComplete } = useOnboarding();
+  const isStaff = user?.role === 'staff';
+
   const [tables, setTables] = useState<Table[]>(initialTables);
-  const [filterStatus, setFilterStatus] = useState<string>('All');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [editTableSeats, setEditTableSeats] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTableSeats, setNewTableSeats] = useState(4);
+  const [newTableNum, setNewTableNum] = useState<number>(1);
+  const [addError, setAddError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
-  const filteredTables = filterStatus === 'All'
-    ? tables
-    : tables.filter((t) => t.status === filterStatus);
+  // Confirmation state for QR regeneration and deletion
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const { setUnsavedDiff, checkUnsaved } = useUnsavedChanges();
+
+  useEffect(() => {
+    markStepComplete("review_tables");
+  }, [markStepComplete]);
+
+  useEffect(() => {
+    const diffs: string[] = [];
+    if (showAddModal) {
+      if (newTableSeats !== 4 || newTableNum !== 1) {
+        diffs.push(`New Table ${newTableNum} with ${newTableSeats} seats (unsaved)`);
+      }
+    } else if (selectedTable && editTableSeats !== null) {
+      if (editTableSeats !== selectedTable.seats) {
+        diffs.push(`Table ${selectedTable.number} seats changed to <b>${editTableSeats}</b>`);
+      }
+    }
+    setUnsavedDiff(diffs);
+  }, [showAddModal, newTableSeats, newTableNum, selectedTable, editTableSeats, setUnsavedDiff]);
+
+  const handleCloseAdd = () => checkUnsaved(() => { setUnsavedDiff([]); setShowAddModal(false); });
+  const handleCloseEdit = () => checkUnsaved(() => { setUnsavedDiff([]); setSelectedTable(null); setEditTableSeats(null); });
 
   const addTable = () => {
-    const nextNum = Math.max(...tables.map((t) => t.number)) + 1;
+    if (tables.some(t => t.number === newTableNum)) {
+      setAddError(`Table ${newTableNum} already exists.`);
+      return;
+    }
+    const token = generateTableToken();
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
     const newTable: Table = {
-      id: nextNum,
-      number: nextNum,
+      id: Date.now(),
+      number: newTableNum,
       seats: newTableSeats,
-      status: 'Empty',
-      qrCodeUrl: `https://platera.app/order?t=${nextNum}`,
-      qrLink: `https://platera.app/order?t=${nextNum}`,
+      token,
+      qrCodeUrl: `${baseUrl}/order/${token}`,
+      qrLink: `${baseUrl}/order/${token}`,
     };
-    setTables((prev) => [...prev, newTable]);
+    setTables((prev) => [...prev, newTable].sort((a, b) => a.number - b.number));
+    setUnsavedDiff([]);
     setShowAddModal(false);
-    setNewTableSeats(4);
+  };
+
+  const saveTableEdit = () => {
+    if (selectedTable && editTableSeats !== null) {
+      setTables((prev) => prev.map(t => t.id === selectedTable.id ? { ...t, seats: editTableSeats } : t));
+      setSelectedTable(null);
+      setEditTableSeats(null);
+      setUnsavedDiff([]);
+    }
+  };
+
+  const deleteTable = () => {
+    if (selectedTable) {
+      setTables((prev) => prev.filter(t => t.id !== selectedTable.id));
+      setSelectedTable(null);
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  const regenerateQR = () => {
+    if (selectedTable) {
+      const newToken = generateTableToken();
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
+      const newUrl = `${baseUrl}/order/${newToken}`;
+
+      setTables((prev) => prev.map((t) => {
+        if (t.id === selectedTable.id) {
+          const updatedTable = { ...t, token: newToken, qrCodeUrl: newUrl, qrLink: newUrl };
+          setSelectedTable(updatedTable);
+          return updatedTable;
+        }
+        return t;
+      }));
+      setShowRegenerateConfirm(false);
+    }
   };
 
   const copyLink = () => {
@@ -70,142 +142,124 @@ export default function Tables() {
     }
   };
 
-  const getTableOrder = (tableNum: number) => {
-    return orders.find((o) => o.table === tableNum);
-  };
+  if (isRefreshing) return <PageSkeleton />;
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground-950 dark:text-foreground-100 font-heading">
-            Tables
-          </h1>
-          <p className="text-sm text-foreground-400 mt-1 font-body">
-            {tables.filter((t) => t.status === 'Occupied').length} occupied ·{' '}
-            {tables.filter((t) => t.status === 'Empty').length} available ·{' '}
-            {tables.filter((t) => t.status === 'Awaiting Payment').length} awaiting payment
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-all cursor-pointer whitespace-nowrap"
-        >
-          <i className="ri-add-line"></i> Add Table
-        </button>
-      </div>
-
-      {/* Status Filters */}
-      <div className="flex gap-2 flex-wrap">
-        {['All', 'Empty', 'Occupied', 'Awaiting Payment'].map((status) => {
-          const count = status === 'All'
-            ? tables.length
-            : tables.filter((t) => t.status === status).length;
-          return (
-            <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
-                filterStatus === status
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-white dark:bg-foreground-900 text-foreground-600 dark:text-foreground-300 border border-background-200 dark:border-foreground-700 hover:border-primary-300 dark:hover:border-primary-600'
-              }`}
-            >
-              {status}
-              <span className={`ml-1.5 text-xs ${filterStatus === status ? 'text-white/80' : 'text-foreground-400'}`}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <PageHeader
+        title="Tables"
+        description={`Manage ${tables.length} tables and QR ordering codes`}
+      >
+        {!isStaff && (
+          <button
+            onClick={() => {
+              setNewTableNum(tables.length > 0 ? Math.max(...tables.map((t) => t.number)) + 1 : 1);
+              setNewTableSeats(4);
+              setAddError('');
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-all cursor-pointer whitespace-nowrap"
+          >
+            <i className="ri-add-line"></i> Add Table
+          </button>
+        )}
+      </PageHeader>
 
       {/* Table Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {filteredTables.map((table) => (
-          <TableTile key={table.id} table={table} onClick={setSelectedTable} />
+        {tables.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((table) => (
+          <TableTile key={table.id} table={table} onClick={(t) => { setSelectedTable(t); setEditTableSeats(t.seats); }} />
         ))}
       </div>
 
-      {/* Table Detail Modal */}
-      {selectedTable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
-          <div className="absolute inset-0 bg-foreground-950/40" onClick={() => setSelectedTable(null)}></div>
-          <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-xl w-full max-w-lg animate-scale-in overflow-hidden max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
+      {/* Pagination */}
+      {tables.length > itemsPerPage && (
+        <div className="flex items-center justify-between border-t border-background-200 dark:border-foreground-800 pt-4 mt-2">
+          <span className="text-sm text-foreground-500 font-body">
+            Showing <span className="font-bold text-foreground-900 dark:text-foreground-100">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-bold text-foreground-900 dark:text-foreground-100">{Math.min(currentPage * itemsPerPage, tables.length)}</span> of <span className="font-bold text-foreground-900 dark:text-foreground-100">{tables.length}</span> tables
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="w-9 h-9 rounded-lg border border-background-200 dark:border-foreground-700 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              <i className="ri-arrow-left-s-line"></i>
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.ceil(tables.length / itemsPerPage) }).map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`w-9 h-9 rounded-lg text-sm font-semibold transition-all ${currentPage === i + 1
+                      ? 'bg-primary-500 text-white'
+                      : 'border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800'
+                    }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(tables.length / itemsPerPage), p + 1))}
+              disabled={currentPage === Math.ceil(tables.length / itemsPerPage)}
+              className="w-9 h-9 rounded-lg border border-background-200 dark:border-foreground-700 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              <i className="ri-arrow-right-s-line"></i>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modals via Portal to ensure they are above top navbar */}
+      {selectedTable && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={handleCloseEdit}></div>
+          <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-2xl w-full max-w-sm animate-scale-in flex flex-col">
+
             <div className="px-5 py-4 border-b border-background-200 dark:border-foreground-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${tableStatusConfig[selectedTable.status].bg}`}>
-                  <i className={`${tableStatusConfig[selectedTable.status].icon} text-lg`}></i>
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-secondary-50 dark:bg-secondary-900/20">
+                  <i className="ri-restaurant-line text-secondary-500 text-lg"></i>
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading">
                     Table {selectedTable.number}
                   </h2>
-                  <span className="text-xs text-foreground-400 font-body">{selectedTable.seats} seats · {selectedTable.status}</span>
+                  <span className="text-xs text-foreground-400 font-body">Manage Table</span>
                 </div>
               </div>
               <button
-                onClick={() => setSelectedTable(null)}
+                onClick={handleCloseEdit}
                 className="text-foreground-400 hover:text-foreground-600 dark:hover:text-foreground-300 cursor-pointer"
               >
                 <i className="ri-close-line text-xl"></i>
               </button>
             </div>
 
-            <div className="p-5 flex flex-col gap-5">
-              {/* Active Order */}
-              {selectedTable.status !== 'Empty' && selectedTable.currentOrderId && (
-                <div>
-                  <h3 className="text-xs font-semibold text-foreground-700 dark:text-foreground-300 uppercase tracking-wider mb-2 font-body">
-                    Active Order
-                  </h3>
-                  <div className="bg-background-50 dark:bg-foreground-800/50 rounded-lg border border-background-200 dark:border-foreground-700 p-4">
-                    {(() => {
-                      const order = getTableOrder(selectedTable.number);
-                      if (!order) return <span className="text-sm text-foreground-400 font-body">No active order details</span>;
-                      return (
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading">
-                              {order.id}
-                            </span>
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              order.paymentStatus === 'Paid'
-                                ? 'bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-300'
-                                : 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300'
-                            }`}>
-                              {order.paymentStatus}
-                            </span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            {order.items.map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between text-sm">
-                                <span className="text-foreground-700 dark:text-foreground-300 font-body">{item.qty}x {item.name}</span>
-                                <span className="text-foreground-500 dark:text-foreground-400 font-body">GH₵ {item.price * item.qty}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex items-center justify-between pt-2 border-t border-background-200 dark:border-foreground-700">
-                            <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">Total</span>
-                            <span className="text-sm font-bold text-primary-500 font-heading">GH₵ {order.total}</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
+            <div className="p-5 flex flex-col gap-5 overflow-y-auto max-h-[80vh]">
+              {/* Seats Section */}
+              <div>
+                <label className="block text-xs font-semibold text-foreground-700 dark:text-foreground-300 uppercase tracking-wider mb-2 font-body">Table Seats</label>
+                <div className="flex items-center justify-between bg-background-50 dark:bg-foreground-800/50 p-3 rounded-lg border border-background-200 dark:border-foreground-700">
+                  <button onClick={() => setEditTableSeats(Math.max(1, (editTableSeats || 1) - 1))} className="w-10 h-10 rounded-lg bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600 cursor-pointer shadow-sm"><i className="ri-subtract-line text-lg"></i></button>
+                  <span className="text-2xl font-bold text-foreground-900 dark:text-foreground-100 font-heading w-12 text-center">{editTableSeats}</span>
+                  <button onClick={() => setEditTableSeats(Math.min(20, (editTableSeats || 1) + 1))} className="w-10 h-10 rounded-lg bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600 cursor-pointer shadow-sm"><i className="ri-add-line text-lg"></i></button>
                 </div>
-              )}
+                {editTableSeats !== selectedTable.seats && (
+                  <button onClick={saveTableEdit} className="w-full mt-3 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer">
+                    Save Seats
+                  </button>
+                )}
+              </div>
 
               {/* QR Code Section */}
-              <div>
+              <div className="border-t border-background-200 dark:border-foreground-800 pt-5">
                 <h3 className="text-xs font-semibold text-foreground-700 dark:text-foreground-300 uppercase tracking-wider mb-2 font-body">
-                  QR Ordering Code
+                  QR Ordering Link
                 </h3>
                 <div className="bg-background-50 dark:bg-foreground-800/50 rounded-lg border border-background-200 dark:border-foreground-700 p-5 flex flex-col items-center gap-4">
-                  {/* QR Code */}
-                  <div className="w-48 h-48 bg-white rounded-lg p-2 flex items-center justify-center">
+                  <div className="w-48 h-48 bg-white rounded-lg p-2 flex items-center justify-center shadow-sm">
                     <QRCodeCanvas
                       value={selectedTable.qrLink}
                       size={176}
@@ -216,93 +270,194 @@ export default function Tables() {
                     />
                   </div>
 
-                  {/* Link */}
                   <div className="w-full flex flex-col gap-2">
-                    <p className="text-xs text-foreground-500 dark:text-foreground-400 font-body text-center">
-                      Scan to order or share the link below
-                    </p>
                     <div className="flex items-center gap-2 bg-white dark:bg-foreground-800 rounded-lg border border-background-200 dark:border-foreground-700 p-2">
                       <code className="text-xs text-foreground-600 dark:text-foreground-300 font-mono flex-1 truncate">
                         {selectedTable.qrLink}
                       </code>
                       <button
                         onClick={copyLink}
-                        className="px-3 py-1.5 rounded-md bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium transition-all cursor-pointer whitespace-nowrap flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-md bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-300 hover:bg-secondary-200 dark:hover:bg-secondary-800 text-xs font-medium transition-all cursor-pointer whitespace-nowrap flex items-center gap-1"
                       >
                         <i className={copied ? 'ri-check-line' : 'ri-file-copy-line'}></i>
-                        {copied ? 'Copied!' : 'Copy'}
+                        {copied ? 'Copied' : 'Copy'}
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-1">
-                {selectedTable.status !== 'Empty' && (
-                  <button className="flex-1 py-2.5 rounded-lg border border-primary-200 dark:border-primary-800 text-primary-600 dark:text-primary-400 font-medium text-sm hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all cursor-pointer whitespace-nowrap">
-                    <i className="ri-bill-line mr-1"></i> Print Bill
-                  </button>
-                )}
-                <button className="flex-1 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer whitespace-nowrap">
-                  <i className="ri-download-line mr-1"></i> Download QR
+              <div className="flex flex-col gap-2 pt-2">
+                <button className="w-full py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer flex items-center justify-center gap-2">
+                  <i className="ri-download-line"></i> Download QR Code
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Table Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
-          <div className="absolute inset-0 bg-foreground-950/40" onClick={() => setShowAddModal(false)}></div>
-          <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-xl w-full max-w-sm animate-scale-in">
-            <div className="px-5 py-4 border-b border-background-200 dark:border-foreground-800 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading">Add New Table</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-foreground-400 hover:text-foreground-600 dark:hover:text-foreground-300 cursor-pointer">
-                <i className="ri-close-line text-xl"></i>
-              </button>
-            </div>
-            <div className="p-5 flex flex-col gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground-700 dark:text-foreground-300 mb-1 font-body">Number of Seats</label>
-                <div className="flex items-center gap-3">
+                <div className="flex gap-2">
                   <button
-                    onClick={() => setNewTableSeats(Math.max(1, newTableSeats - 1))}
-                    className="w-10 h-10 rounded-lg border border-background-200 dark:border-foreground-700 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 cursor-pointer"
+                    onClick={() => setShowRegenerateConfirm(true)}
+                    className="flex-1 py-2.5 rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 font-medium text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
-                    <i className="ri-subtract-line"></i>
+                    <i className="ri-refresh-line"></i> Regenerate Link
                   </button>
-                  <span className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading w-8 text-center">{newTableSeats}</span>
                   <button
-                    onClick={() => setNewTableSeats(Math.min(12, newTableSeats + 1))}
-                    className="w-10 h-10 rounded-lg border border-background-200 dark:border-foreground-700 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 cursor-pointer"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="py-2.5 px-4 rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 font-medium text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
-                    <i className="ri-add-line"></i>
+                    <i className="ri-delete-bin-line"></i>
                   </button>
                 </div>
               </div>
-              <p className="text-xs text-foreground-400 font-body">
-                Table will be numbered {Math.max(...tables.map((t) => t.number)) + 1} with an auto-generated QR code.
-              </p>
-              <div className="flex gap-3 pt-2">
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Regenerate Confirmation Modal */}
+      {showRegenerateConfirm && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={() => setShowRegenerateConfirm(false)}></div>
+          <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-2xl w-full max-w-sm animate-scale-in p-6">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <i className="ri-alert-line text-red-600 dark:text-red-400 text-2xl"></i>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading mb-1">
+                  Regenerate QR Code?
+                </h3>
+                <p className="text-sm text-foreground-500 font-body">
+                  This will generate a new secure link for Table {selectedTable?.number}. The old QR code will no longer work and must be physically replaced on the table.
+                </p>
+              </div>
+              <div className="flex w-full gap-3 mt-2">
                 <button
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => setShowRegenerateConfirm(false)}
                   className="flex-1 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={addTable}
-                  className="flex-1 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer"
+                  onClick={regenerateQR}
+                  className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-all cursor-pointer"
                 >
-                  Add Table
+                  Regenerate
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)}></div>
+          <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-2xl w-full max-w-sm animate-scale-in p-6">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <i className="ri-delete-bin-line text-red-600 dark:text-red-400 text-2xl"></i>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading mb-1">
+                  Delete Table {selectedTable?.number}?
+                </h3>
+                <p className="text-sm text-foreground-500 font-body">
+                  This action cannot be undone. You can reuse this table number later if needed.
+                </p>
+              </div>
+              <div className="flex w-full gap-3 mt-2">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={deleteTable}
+                  className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-all cursor-pointer"
+                >
+                  Delete Table
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Add Table Modal */}
+      {showAddModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={handleCloseAdd}></div>
+          <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-2xl w-full max-w-sm animate-scale-in">
+            <div className="px-5 py-4 border-b border-background-200 dark:border-foreground-800 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading">Add New Table</h2>
+              <button onClick={handleCloseAdd} className="text-foreground-400 hover:text-foreground-600 dark:hover:text-foreground-300 cursor-pointer">
+                <i className="ri-close-line text-xl"></i>
+              </button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              {addError && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg text-sm text-red-600 dark:text-red-400 font-medium animate-fade-in flex items-center gap-2">
+                  <i className="ri-error-warning-line text-lg"></i>
+                  {addError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-foreground-700 dark:text-foreground-300 mb-2 font-body">Table Number</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={newTableNum}
+                  onChange={(e) => {
+                    setNewTableNum(parseInt(e.target.value) || 1);
+                    setAddError('');
+                  }}
+                  className="w-full bg-background-50 dark:bg-foreground-800/50 p-3 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-900 dark:text-foreground-100 font-heading text-lg focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground-700 dark:text-foreground-300 mb-2 font-body">Number of Seats</label>
+                <div className="flex items-center justify-between bg-background-50 dark:bg-foreground-800/50 p-3 rounded-lg border border-background-200 dark:border-foreground-700">
+                  <button
+                    onClick={() => setNewTableSeats(Math.max(1, newTableSeats - 1))}
+                    className="w-10 h-10 rounded-lg bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600 cursor-pointer shadow-sm transition-all"
+                  >
+                    <i className="ri-subtract-line text-lg"></i>
+                  </button>
+                  <span className="text-2xl font-bold text-foreground-900 dark:text-foreground-100 font-heading w-12 text-center">{newTableSeats}</span>
+                  <button
+                    onClick={() => setNewTableSeats(Math.min(20, newTableSeats + 1))}
+                    className="w-10 h-10 rounded-lg bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600 cursor-pointer shadow-sm transition-all"
+                  >
+                    <i className="ri-add-line text-lg"></i>
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-foreground-500 font-body text-center bg-accent-50 dark:bg-accent-900/20 p-3 rounded-lg border border-accent-100 dark:border-accent-900/50">
+                A secure QR ordering code will be generated automatically for this table.
+              </p>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleCloseAdd}
+                  className="flex-1 py-3 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addTable}
+                  className="flex-1 py-3 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer shadow-md shadow-primary-500/20"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

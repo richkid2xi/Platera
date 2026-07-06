@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTheme } from '@/contexts/ThemeContext';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRefresh } from '@/contexts/RefreshContext';
 
 interface TopBarProps {
   sidebarCollapsed: boolean;
@@ -9,13 +9,18 @@ interface TopBarProps {
 }
 
 export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarProps) {
-  const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const { isRefreshing, triggerRefresh } = useRefresh();
+  const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const handleRefresh = async () => {
+    await triggerRefresh();
+    setToast({ message: 'Data refreshed successfully', visible: true });
+    setTimeout(() => setToast({ message: '', visible: false }), 3000);
+  };
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [showSignoutModal, setShowSignoutModal] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -65,9 +70,8 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
 
   return (
     <header
-      className={`fixed top-0 right-0 h-16 bg-white dark:bg-foreground-900 border-b border-background-200 dark:border-foreground-800 flex items-center justify-between px-4 md:px-6 z-20 transition-all duration-300 ${
-        sidebarCollapsed ? 'lg:left-[72px] left-0' : 'lg:left-[240px] left-0'
-      }`}
+      className={`fixed top-0 right-0 h-16 bg-white dark:bg-foreground-900 border-b border-background-200 dark:border-foreground-800 flex items-center justify-between px-4 md:px-6 z-20 transition-all duration-300 ${sidebarCollapsed ? 'lg:left-[72px] left-0' : 'lg:left-[240px] left-0'
+        }`}
     >
       <div className="flex items-center gap-3">
         {/* Mobile hamburger */}
@@ -86,13 +90,14 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
       </div>
 
       <div className="flex items-center gap-1.5 md:gap-3">
-        {/* Dark mode toggle */}
+
+        {/* Global Refresh Button */}
         <button
-          onClick={toggleTheme}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-foreground-400 hover:bg-background-100 dark:hover:bg-foreground-800 hover:text-foreground-600 dark:hover:text-foreground-300 transition-all cursor-pointer"
-          title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          onClick={handleRefresh}
+          className="relative w-10 h-10 rounded-lg flex items-center justify-center text-foreground-400 hover:bg-background-100 dark:hover:bg-foreground-800 hover:text-foreground-600 dark:hover:text-foreground-300 transition-all cursor-pointer"
+          title="Refresh data"
         >
-          <i className={theme === 'light' ? 'ri-moon-line text-xl' : 'ri-sun-line text-xl'}></i>
+          <i className={`ri-refresh-line text-xl ${isRefreshing ? 'animate-spin text-primary-500' : ''}`}></i>
         </button>
 
         {/* Notifications */}
@@ -153,7 +158,7 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
           >
             <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center">
               <span className="text-white text-sm font-bold font-heading">
-                {user ? user.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase() : 'U'}
+                {user ? user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'U'}
               </span>
             </div>
             <div className="hidden md:flex flex-col items-start">
@@ -170,54 +175,40 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
                 <p className="text-xs text-foreground-400 font-body truncate">{user?.email ?? ''}</p>
               </div>
               <div className="py-1">
-                <button onClick={() => { navigate('/profile'); setShowProfile(false); }} className="w-full px-4 py-2 text-sm text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 text-left cursor-pointer font-body whitespace-nowrap">
+                <Link to="/profile" onClick={() => setShowProfile(false)} className="w-full px-4 py-2 text-sm text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 text-left cursor-pointer font-body whitespace-nowrap flex items-center">
                   <i className="ri-user-3-line mr-2"></i> My Profile
-                </button>
-                <button onClick={() => { navigate('/settings'); setShowProfile(false); }} className="w-full px-4 py-2 text-sm text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 text-left cursor-pointer font-body whitespace-nowrap">
+                </Link>
+                <Link to="/settings" onClick={() => setShowProfile(false)} className="w-full px-4 py-2 text-sm text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 text-left cursor-pointer font-body whitespace-nowrap flex items-center">
                   <i className="ri-settings-3-line mr-2"></i> Settings
-                </button>
+                </Link>
               </div>
-              <div className="border-t border-background-200 dark:border-foreground-800 py-1">
-                <button onClick={() => { setShowSignoutModal(true); setShowProfile(false); }} className="w-full px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 text-left cursor-pointer font-body whitespace-nowrap">
-                  <i className="ri-logout-box-r-line mr-2"></i> Sign Out
-                </button>
-              </div>
+
             </div>
           )}
         </div>
       </div>
 
-      {/* Sign Out Confirmation Modal */}
-      {showSignoutModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 modal-backdrop" onClick={() => setShowSignoutModal(false)}></div>
-          <div className="relative bg-white dark:bg-foreground-900 rounded-2xl p-6 w-full max-w-sm shadow-xl animate-scale-in">
-            <div className="flex flex-col items-center text-center">
-              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
-                <i className="ri-logout-box-r-line text-2xl text-red-500"></i>
-              </div>
-              <h3 className="text-lg font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-2">Sign Out</h3>
-              <p className="text-sm text-foreground-500 dark:text-foreground-400 font-body mb-6">Are you sure you want to sign out of Platera?</p>
-              
-              <div className="flex w-full gap-3">
-                <button 
-                  onClick={() => setShowSignoutModal(false)}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg border border-background-200 dark:border-foreground-800 text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer font-body"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={() => {
-                    setShowSignoutModal(false);
-                    signOut();
-                    navigate('/', { replace: true });
-                  }}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-all cursor-pointer font-body"
-                >
-                  Sign Out
-                </button>
-              </div>
+      {/* Global Refresh Toast Notification */}
+      {toast.visible && (
+        <div className="fixed top-20 right-6 z-[100] animate-slide-in-right">
+          <div className="bg-white dark:bg-foreground-900 rounded-lg border-l-4 border-l-primary-500 border border-background-200 dark:border-foreground-800 shadow-xl p-4 pr-12 flex items-center gap-3 relative min-w-[250px]">
+            <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
+              <i className="ri-check-line text-primary-500 text-lg"></i>
             </div>
+            <div>
+              <p className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-heading">
+                Success
+              </p>
+              <p className="text-xs text-foreground-600 dark:text-foreground-400 font-body mt-0.5">
+                {toast.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setToast({ message: '', visible: false })}
+              className="absolute top-1/2 -translate-y-1/2 right-3 text-foreground-400 hover:text-foreground-600 cursor-pointer"
+            >
+              <i className="ri-close-line text-lg"></i>
+            </button>
           </div>
         </div>
       )}

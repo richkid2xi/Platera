@@ -1,8 +1,13 @@
 import { useState } from 'react';
+import PageHeader from '@/components/base/PageHeader';
+import PageSkeleton from '@/components/base/PageSkeleton';
+import CustomSelect from '@/components/base/CustomSelect';
+import { useRefresh } from '@/contexts/RefreshContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { salesData, dateRangeOptions } from '@/mocks/reports';
 
 export default function Reports() {
+  const { isRefreshing } = useRefresh();
   const [dateRange, setDateRange] = useState('week');
   const [chartView, setChartView] = useState<'revenue' | 'orders'>('revenue');
 
@@ -17,35 +22,30 @@ export default function Reports() {
     { label: 'Top Category', value: salesData.summary.topCategory, change: salesData.summary.topCategoryShare, up: true, icon: 'ri-restaurant-2-line', color: 'text-foreground-500 bg-background-100 dark:bg-foreground-800', upLabel: 'of revenue' },
   ];
 
+  if (isRefreshing) return <PageSkeleton />;
+
   return (
-    <div className="animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground-950 dark:text-foreground-100 font-heading">Sales & Reports</h1>
-          <p className="text-sm text-foreground-500 dark:text-foreground-400 mt-1 font-body">Analyze revenue, track performance, and export reports</p>
-        </div>
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <PageHeader
+        title="Sales & Reports"
+        description="Analyze revenue, track performance, and export reports"
+      >
         <div className="flex items-center gap-2 flex-wrap">
-          {dateRangeOptions.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setDateRange(opt.value)}
-              className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap font-body ${
-                dateRange === opt.value
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-white dark:bg-foreground-900 text-foreground-600 dark:text-foreground-300 border border-background-200 dark:border-foreground-800 hover:bg-background-50 dark:hover:bg-foreground-800'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+          <div className="w-40">
+            <CustomSelect
+              value={dateRange}
+              onChange={(val) => setDateRange(val)}
+              options={dateRangeOptions}
+            />
+          </div>
           <button className="px-4 py-2 text-xs font-semibold rounded-lg bg-secondary-500 text-white hover:bg-secondary-600 transition-all cursor-pointer whitespace-nowrap font-body">
             <i className="ri-download-2-line mr-1.5"></i>Export Report
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {summaryCards.map((card, i) => (
           <div key={card.label} className={`stagger-${i + 1} bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-4 md:p-5 hover-lift`}>
             <div className="flex items-center gap-3 mb-3">
@@ -65,7 +65,7 @@ export default function Reports() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Revenue Bar Chart */}
         <div className="lg:col-span-2 bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
           <div className="flex items-center justify-between mb-5">
@@ -105,29 +105,31 @@ export default function Reports() {
         </div>
 
         {/* Category Breakdown */}
-        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
+        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5 flex flex-col">
           <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-5">Category Breakdown</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={salesData.categoryBreakdown}
-                cx="50%"
-                cy="50%"
-                innerRadius={55}
-                outerRadius={85}
-                paddingAngle={4}
-                dataKey="value"
-              >
-                {salesData.categoryBreakdown.map((_entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{ borderRadius: 12, fontSize: 13 }}
-                formatter={(value) => [`${value as number}%`, 'Share']}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="flex-1 min-h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={salesData.categoryBreakdown}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={4}
+                  dataKey="value"
+                >
+                  {salesData.categoryBreakdown.map((_entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, fontSize: 13 }}
+                  formatter={(value) => [`${value as number}%`, 'Share']}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
           <div className="space-y-2 mt-3">
             {salesData.categoryBreakdown.map((cat, i) => (
               <div key={cat.name} className="flex items-center justify-between text-sm font-body">
@@ -142,8 +144,60 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* Financial & Payment Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Payment Methods */}
+        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
+          <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-5">Payment Methods</h3>
+          <div className="space-y-5 mt-2">
+            {salesData.paymentMethods.map((method) => (
+              <div key={method.method}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">{method.method}</span>
+                  <span className="text-sm font-bold text-foreground-600 dark:text-foreground-300 font-body">{method.value}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-background-100 dark:bg-foreground-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${method.value}%`, backgroundColor: method.color }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recent Transactions */}
+        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5 overflow-hidden flex flex-col">
+          <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-4">Recent Transactions</h3>
+          <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+            <div className="space-y-4">
+              {salesData.recentTransactions.map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-background-100 dark:bg-foreground-800 flex items-center justify-center text-foreground-600 dark:text-foreground-300">
+                      <i className="ri-receipt-line text-lg"></i>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-body">{tx.item}</p>
+                      <p className="text-xs text-foreground-500 font-body">{tx.qty} units • {tx.time}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-body">{tx.total}</p>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${tx.status === 'Completed' ? 'bg-secondary-50 text-secondary-600 dark:bg-secondary-900/30 dark:text-secondary-400' : 'bg-accent-50 text-accent-600 dark:bg-accent-900/30 dark:text-accent-400'}`}>
+                      {tx.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Bottom Tables Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Best Sellers Table */}
         <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
           <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-4">Best Selling Items</h3>

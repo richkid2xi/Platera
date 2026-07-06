@@ -7,6 +7,8 @@ export interface MenuItem {
   image: string;
   available: boolean;
   popular: boolean;
+  requiresPrep?: boolean;
+  prepTime?: number; // in minutes
   addOns?: { name: string; price: number }[];
   variants?: { name: string; price: number }[];
 }

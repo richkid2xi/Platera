@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import type { MenuItem } from '@/mocks/menu';
 
 interface ItemDetailModalProps {
@@ -9,8 +10,8 @@ interface ItemDetailModalProps {
 }
 
 export default function ItemDetailModal({ item, onClose, onToggle, onEdit, onDelete }: ItemDetailModalProps) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-backdrop">
       <div className="absolute inset-0 bg-foreground-950/40" onClick={onClose}></div>
       <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-xl w-full max-w-md animate-scale-in overflow-hidden max-h-[90vh] overflow-y-auto">
         {/* Image */}
@@ -123,6 +124,7 @@ export default function ItemDetailModal({ item, onClose, onToggle, onEdit, onDel
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

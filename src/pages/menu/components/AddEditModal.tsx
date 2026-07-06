@@ -1,27 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useUnsavedChanges } from '@/contexts/UnsavedChangesContext';
 import type { MenuItem } from '@/mocks/menu';
-import { categories } from '@/mocks/menu';
 
 interface AddEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (item: MenuItem) => void;
   editItem?: MenuItem | null;
+  categories: string[];
 }
 
 const DEFAULT_IMAGE_URL = 'https://readdy.ai/api/search-image?query=Beautifully%20plated%20modern%20African%20dish%20on%20a%20white%20ceramic%20plate%20with%20elegant%20garnish%2C%20warm%20studio%20lighting%2C%20clean%20minimal%20composition%2C%20professional%20food%20photography%20style%2C%20top-down%20angle%2C%20high%20detail%2C%20vibrant%20colors&width=600&height=400&seq=platera-menu-default&orientation=landscape';
 
-export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddEditModalProps) {
+export default function AddEditModal({ isOpen, onClose, onSave, editItem, categories }: AddEditModalProps) {
   const isEdit = !!editItem;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     name: '',
     description: '',
     price: '',
-    category: 'Mains',
+    category: categories[0] || 'Mains',
     imageUrl: '',
     popular: false,
+    requiresPrep: true,
+    prepTime: 15,
   });
+
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
 
   const [variantInput, setVariantInput] = useState({ name: '', price: '' });
   const [variants, setVariants] = useState<{ name: string; price: number }[]>([]);
@@ -32,28 +40,66 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
   const [imagePreview, setImagePreview] = useState('');
   const [imageError, setImageError] = useState(false);
 
+  const { setUnsavedDiff, checkUnsaved, unsavedDiff } = useUnsavedChanges();
+
+  useEffect(() => {
+    const diffs: string[] = [];
+    if (editItem) {
+      if (form.name !== editItem.name) diffs.push(`Name changed to <b>${form.name}</b>`);
+      if (form.price !== String(editItem.price)) diffs.push(`Price changed to <b>${form.price}</b>`);
+      if (form.description !== editItem.description) diffs.push(`Description modified`);
+      const finalCategory = isCustomCategory ? customCategoryName : form.category;
+      if (finalCategory !== editItem.category) diffs.push(`Category changed to <b>${finalCategory}</b>`);
+      if (form.requiresPrep !== editItem.requiresPrep) diffs.push(`Requires Prep toggled`);
+      if (form.requiresPrep && form.prepTime !== editItem.prepTime) diffs.push(`Prep time changed to <b>${form.prepTime}m</b>`);
+    } else {
+      if (form.name || form.price || form.description) {
+        diffs.push(`New unsaved item: <b>${form.name || 'Untitled'}</b>`);
+      }
+    }
+    setUnsavedDiff(diffs);
+  }, [form, isCustomCategory, customCategoryName, editItem, setUnsavedDiff]);
+
+  const handleClose = () => {
+    checkUnsaved(() => {
+      setUnsavedDiff([]); // clear on actual close
+      onClose();
+    });
+  };
+
   useEffect(() => {
     if (editItem) {
       setForm({
         name: editItem.name,
         description: editItem.description,
         price: String(editItem.price),
-        category: editItem.category,
+        category: categories.includes(editItem.category) ? editItem.category : 'custom',
         imageUrl: editItem.image,
         popular: editItem.popular,
+        requiresPrep: editItem.requiresPrep ?? true,
+        prepTime: editItem.prepTime ?? 15,
       });
+      if (!categories.includes(editItem.category)) {
+        setIsCustomCategory(true);
+        setCustomCategoryName(editItem.category);
+      } else {
+        setIsCustomCategory(false);
+        setCustomCategoryName('');
+      }
       setVariants(editItem.variants || []);
       setAddOns(editItem.addOns || []);
       setImagePreview(editItem.image);
       setImageError(false);
     } else {
-      setForm({ name: '', description: '', price: '', category: 'Mains', imageUrl: '', popular: false });
+      setForm({ name: '', description: '', price: '', category: categories[0] || 'Mains', imageUrl: '', popular: false, requiresPrep: true, prepTime: 15 });
+      setIsCustomCategory(false);
+      setCustomCategoryName('');
       setVariants([]);
       setAddOns([]);
       setImagePreview('');
       setImageError(false);
     }
-  }, [editItem, isOpen]);
+  }, [editItem, isOpen, categories]);
 
   if (!isOpen) return null;
 
@@ -61,6 +107,20 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
     setForm(prev => ({ ...prev, imageUrl: url }));
     setImagePreview(url);
     setImageError(false);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setForm(prev => ({ ...prev, imageUrl: result }));
+      setImagePreview(result);
+      setImageError(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleImageError = () => {
@@ -87,9 +147,23 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
     setAddOns(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === 'custom') {
+      setIsCustomCategory(true);
+      setForm({ ...form, category: 'custom' });
+    } else {
+      setIsCustomCategory(false);
+      setForm({ ...form, category: val });
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.price) return;
+
+    const finalCategory = isCustomCategory ? customCategoryName : form.category;
+    if (!finalCategory) return; // Prevent empty category
 
     const basePrice = Number(form.price);
     const finalImage = form.imageUrl || DEFAULT_IMAGE_URL;
@@ -99,26 +173,41 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
       name: form.name,
       description: form.description,
       price: basePrice,
-      category: form.category,
+      category: finalCategory,
       image: finalImage,
       available: editItem ? editItem.available : true,
       popular: form.popular,
+      requiresPrep: form.requiresPrep,
+      prepTime: form.requiresPrep ? form.prepTime : undefined,
       variants: variants.length > 0 ? variants : undefined,
       addOns: addOns.length > 0 ? addOns : undefined,
     });
+    setUnsavedDiff([]);
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
-      <div className="absolute inset-0 bg-foreground-950/40" onClick={onClose}></div>
-      <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-xl w-full max-w-2xl animate-scale-in overflow-hidden max-h-[90vh] flex flex-col">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <div
+        className="absolute inset-0 bg-foreground-950/40 dark:bg-foreground-950/60 backdrop-blur-sm animate-fade-in"
+        onClick={handleClose}
+      ></div>
+      <div className="relative w-full max-w-2xl bg-white dark:bg-foreground-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-up border border-background-200 dark:border-foreground-800">
+
         {/* Header */}
-        <div className="px-6 py-4 border-b border-background-200 dark:border-foreground-800 flex items-center justify-between flex-shrink-0">
-          <h2 className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading">
-            {isEdit ? 'Edit Menu Item' : 'Add New Menu Item'}
-          </h2>
-          <button onClick={onClose} className="text-foreground-400 hover:text-foreground-600 dark:hover:text-foreground-300 cursor-pointer">
+        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-background-200 dark:border-foreground-800 bg-background-50/50 dark:bg-foreground-900/50">
+          <div>
+            <h2 className="text-xl font-bold text-foreground-950 dark:text-foreground-100 font-heading">
+              {isEdit ? 'Edit Menu Item' : 'Add New Item'}
+            </h2>
+            <p className="text-sm text-foreground-500 mt-1 font-body">
+              {isEdit ? 'Update item details and availability' : 'Create a new item for your menu'}
+            </p>
+          </div>
+          <button
+            onClick={handleClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-foreground-400 hover:bg-background-200 dark:hover:bg-foreground-800 transition-colors cursor-pointer"
+          >
             <i className="ri-close-line text-xl"></i>
           </button>
         </div>
@@ -130,9 +219,9 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
               <label className="block text-sm font-medium text-foreground-700 dark:text-foreground-300 mb-2 font-body">
                 Item Image
               </label>
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 {/* Preview */}
-                <div className="w-40 h-32 rounded-lg border-2 border-dashed border-background-200 dark:border-foreground-700 bg-background-50 dark:bg-foreground-800 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                <div className="w-full sm:w-40 h-40 sm:h-32 rounded-lg border-2 border-dashed border-background-200 dark:border-foreground-700 bg-background-50 dark:bg-foreground-800 flex-shrink-0 overflow-hidden flex items-center justify-center relative group">
                   {imagePreview && !imageError ? (
                     <img
                       src={imagePreview}
@@ -142,21 +231,52 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
                     />
                   ) : (
                     <div className="flex flex-col items-center gap-1 text-foreground-400">
-                      <i className="ri-image-add-line text-xl"></i>
-                      <span className="text-[10px] font-body">No image</span>
+                      <i className="ri-image-add-line text-2xl"></i>
+                      <span className="text-xs font-body">No image</span>
                     </div>
                   )}
+                  {/* Overlay for quick action */}
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                  >
+                    <i className="ri-camera-fill text-white text-2xl drop-shadow-md"></i>
+                  </div>
                 </div>
-                {/* URL Input */}
-                <div className="flex-1 flex flex-col gap-2">
+                {/* Upload Controls */}
+                <div className="flex-1 flex flex-col gap-3 justify-center">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-800 text-sm font-semibold text-foreground-700 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-700 transition-colors shadow-sm"
+                    >
+                      <i className="ri-upload-cloud-2-line"></i>
+                      Upload Photo
+                    </button>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleFileUpload}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 text-foreground-400">
+                    <div className="h-px bg-background-200 dark:bg-foreground-700 flex-1"></div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider">OR</span>
+                    <div className="h-px bg-background-200 dark:bg-foreground-700 flex-1"></div>
+                  </div>
+
                   <input
                     type="text"
                     value={form.imageUrl}
                     onChange={(e) => handleImageUrlChange(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 placeholder-foreground-400 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 font-body"
-                    placeholder="Paste image URL here to upload a photo..."
+                    className="w-full px-3 py-2 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 placeholder-foreground-400 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 font-body"
+                    placeholder="Paste image URL here..."
                   />
-                  <p className="text-xs text-foreground-400 font-body">Paste any image URL to upload. Leave empty to use a default food photo.</p>
                 </div>
               </div>
             </div>
@@ -191,19 +311,46 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
                   required
                 />
               </div>
-              <div>
+              <div className="flex flex-col gap-2">
                 <label className="block text-sm font-medium text-foreground-700 dark:text-foreground-300 mb-1 font-body">
                   Category
                 </label>
-                <select
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 font-body"
-                >
-                  {categories.filter((c) => c !== 'All').map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                {isCustomCategory ? (
+                  <div className="flex items-center gap-2 relative">
+                    <input
+                      type="text"
+                      value={customCategoryName}
+                      onChange={(e) => setCustomCategoryName(e.target.value)}
+                      placeholder="New Category Name"
+                      className="w-full px-3 py-2.5 rounded-lg border border-primary-300 dark:border-primary-600 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-1 focus:ring-primary-500 font-body"
+                      autoFocus
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setIsCustomCategory(false); setForm({ ...form, category: categories[0] || 'Mains' }); }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-400 hover:text-foreground-600 cursor-pointer bg-white dark:bg-foreground-900 px-1"
+                    >
+                      <i className="ri-close-circle-line text-xl"></i>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={form.category}
+                      onChange={handleCategoryChange}
+                      className="w-full appearance-none px-3 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 font-body cursor-pointer transition-shadow"
+                    >
+                      {categories.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                      <option value="custom" className="font-semibold text-primary-500">
+                        + Add Custom Category...
+                      </option>
+                    </select>
+                    <i className="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-foreground-400 pointer-events-none"></i>
+                  </div>
+                )}
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-foreground-700 dark:text-foreground-300 mb-1 font-body">
@@ -220,7 +367,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
                 <p className="text-xs text-foreground-400 mt-1 text-right font-body">{form.description.length}/300</p>
               </div>
               {/* Popular Toggle */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between bg-background-50 dark:bg-foreground-800/50 p-3 rounded-lg border border-background-100 dark:border-foreground-800">
                 <label className="text-sm font-medium text-foreground-700 dark:text-foreground-300 font-body">Mark as Popular</label>
                 <button
                   type="button"
@@ -229,6 +376,42 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
                 >
                   <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${form.popular ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
+              </div>
+
+              {/* Prep Time */}
+              <div className="sm:col-span-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-background-50 dark:bg-foreground-800/50 p-4 rounded-lg border border-background-100 dark:border-foreground-800 mt-2">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm font-medium text-foreground-700 dark:text-foreground-300 font-body">Requires Preparation</label>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, requiresPrep: !form.requiresPrep })}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${form.requiresPrep ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-600'}`}
+                    >
+                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${form.requiresPrep ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                  <span className="text-xs text-foreground-400 font-body">Turn off if item is served instantly (e.g. bottled drinks)</span>
+                </div>
+
+                {form.requiresPrep && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-foreground-600 dark:text-foreground-400 font-body">Est. Time:</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={form.prepTime}
+                        onChange={(e) => setForm({ ...form, prepTime: parseInt(e.target.value) || 0 })}
+                        className="w-24 pl-3 pr-8 py-2 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 font-body"
+                        placeholder="15"
+                        min="1"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-foreground-400 pointer-events-none">
+                        min
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -345,7 +528,8 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
             </button>
             <button
               type="submit"
-              className="flex-1 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer"
+              disabled={unsavedDiff.length === 0}
+              className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all shadow-sm ${unsavedDiff.length > 0 ? 'bg-primary-500 hover:bg-primary-600 text-white cursor-pointer' : 'bg-background-100 dark:bg-foreground-800 text-foreground-400 dark:text-foreground-500 cursor-not-allowed'}`}
             >
               {isEdit ? 'Save Changes' : 'Add Item'}
             </button>
@@ -362,6 +546,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem }: AddE
           />
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

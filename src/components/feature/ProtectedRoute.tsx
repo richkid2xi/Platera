@@ -1,9 +1,16 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import type { UserRole } from "@/config/permissions";
+import type { ReactNode } from "react";
 
-/** Wraps protected routes – redirects to /sign-in when unauthenticated. */
-export default function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+interface ProtectedRouteProps {
+  allowedRoles?: UserRole[];
+  children?: ReactNode;
+}
+
+/** Wraps protected routes – redirects to /sign-in when unauthenticated or handles role mismatches. */
+export default function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
+  const { user, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -31,5 +38,9 @@ export default function ProtectedRoute() {
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  return <Outlet />;
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" state={{ error: "You don't have permission to access this page." }} replace />;
+  }
+
+  return children ? <>{children}</> : <Outlet />;
 }

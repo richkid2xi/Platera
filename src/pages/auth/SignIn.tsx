@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { staffMembers, allRoles } from "@/mocks/staff";
+import ShutterImagePanel from "@/components/feature/ShutterImagePanel";
 
 // ── Mock credentials panel ─────────────────────────────────────────
 const MOCK_PASSWORD = "platera123";
@@ -20,7 +21,7 @@ const ROLE_COLOR: Record<string, { bg: string; text: string }> = {
   Cleaner:              { bg: "bg-foreground-100 dark:bg-foreground-800", text: "text-foreground-600 dark:text-foreground-400" },
 };
 
-const MOCK_ACCOUNTS = staffMembers.filter((s) => s.status === "active");
+const MOCK_ACCOUNTS = staffMembers.filter((s) => s.status === "active" && s.role === "Owner");
 
 function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -91,7 +92,8 @@ export default function SignIn() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const stateError = (location.state as { error?: string })?.error;
+  const [error, setError] = useState<string | null>(stateError || null);
   const [showMockPanel, setShowMockPanel] = useState(false);
   const [statsVisible, setStatsVisible] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
@@ -109,6 +111,20 @@ export default function SignIn() {
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+
+  useEffect(() => {
+    const stateError = (location.state as { error?: string })?.error;
+    const sessionError = sessionStorage.getItem('logoutReason');
+
+    if (stateError) {
+      setError(stateError);
+      // Clear the state so it doesn't persist on reload
+      navigate(location.pathname, { replace: true, state: {} });
+    } else if (sessionError === 'timeout') {
+      setError("Session expired, please log in again");
+      sessionStorage.removeItem('logoutReason');
+    }
+  }, [location, navigate]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -134,26 +150,13 @@ export default function SignIn() {
 
   return (
     <div className="min-h-screen flex bg-background-50 dark:bg-foreground-950 font-body">
-      {/* ══════════════════ LEFT PANEL ══════════════════ */}
-      <aside className="hidden lg:flex lg:w-[52%] xl:w-[55%] relative flex-col overflow-hidden">
-        {/* Food hero image */}
-        <div className="absolute inset-0">
-          <img
-            src="/auth-food-hero.png"
-            alt="Beautiful restaurant dishes"
-            className="w-full h-full object-cover"
-          />
-          {/* Gradient overlays */}
-          <div className="absolute inset-0 bg-gradient-to-t from-foreground-950 via-foreground-950/60 to-foreground-950/20" />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-foreground-950/10" />
-        </div>
-
-        {/* Content layered over image */}
-        <div className="relative z-10 flex flex-col justify-between h-full p-10 xl:p-12">
-          {/* Logo */}
+      {/* ══════════════════ LEFT PANEL — Shutter Animation ══════════════════ */}
+      <ShutterImagePanel className="hidden lg:flex lg:w-[52%] xl:w-[55%]">
+        <div className="flex flex-col justify-between h-full p-10 xl:p-12">
+          {/* Logo watermark */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary-500 flex items-center justify-center shadow-lg shadow-primary-500/40">
-              <i className="ri-restaurant-2-line text-xl text-white" />
+            <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
+              <img src="/favicon.png" alt="Platera Bowl" className="w-full h-full object-cover" />
             </div>
             <span className="text-2xl font-black text-white font-heading tracking-tight drop-shadow">
               Platera
@@ -197,14 +200,12 @@ export default function SignIn() {
               ))}
             </div>
             <div>
-              <p className="text-white text-sm font-semibold leading-tight">
-                Trusted by your team
-              </p>
+              <p className="text-white text-sm font-semibold leading-tight">Trusted by your team</p>
               <p className="text-white/50 text-xs">10 staff members onboarded</p>
             </div>
           </div>
         </div>
-      </aside>
+      </ShutterImagePanel>
 
       {/* ══════════════════ RIGHT PANEL ══════════════════ */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative overflow-y-auto bg-white dark:bg-foreground-950">
@@ -220,8 +221,8 @@ export default function SignIn() {
         <div className="w-full max-w-[390px] animate-fade-in-up">
           {/* Mobile logo */}
           <div className="flex lg:hidden items-center gap-2.5 mb-10">
-            <div className="w-9 h-9 rounded-xl bg-primary-500 flex items-center justify-center shadow-lg shadow-primary-500/30">
-              <i className="ri-restaurant-2-line text-lg text-white" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center">
+              <img src="/favicon.png" alt="Platera Bowl" className="w-full h-full object-cover" />
             </div>
             <span className="text-xl font-black text-foreground-900 dark:text-foreground-100 font-heading">
               Platera

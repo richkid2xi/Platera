@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { createPortal } from 'react-dom';
+
 interface DeleteConfirmModalProps {
   isOpen: boolean;
   itemName: string;
@@ -33,8 +35,8 @@ export default function DeleteConfirmModal({ isOpen, itemName, onCancel, onConfi
     ? `This will permanently delete ${count} menu items from your restaurant's menu.`
     : `This will permanently delete "${itemName}" from your restaurant's menu.`;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-backdrop">
       <div className="absolute inset-0 bg-foreground-950/40" onClick={handleCancel}></div>
       <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-xl w-full max-w-sm animate-scale-in overflow-hidden">
         <div className="p-6 flex flex-col items-center gap-4 text-center">
@@ -83,6 +85,7 @@ export default function DeleteConfirmModal({ isOpen, itemName, onCancel, onConfi
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -263,3 +263,55 @@ body {
 .modal-backdrop {
   backdrop-filter: blur(2px);
 }
+
+/* ─────────────── SHUTTER PANEL ANIMATION ─────────────── */
+/* Each slat starts closed (scaleX=1 = opaque cover), opens to 0 */
+@keyframes shutterClose {
+  0%   { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes shutterOpen {
+  0%   { transform: scaleX(1); }
+  100% { transform: scaleX(0); }
+}
+
+.shutter-slat {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-color: #0d0e11;
+  transform-origin: left center;
+  transform: scaleX(0);
+  will-change: transform;
+}
+
+.shutter-closing .shutter-slat {
+  animation: shutterClose 0.22s ease-in forwards;
+}
+
+.shutter-opening .shutter-slat {
+  animation: shutterOpen 0.22s ease-out forwards;
+}
+
+/* ─────────────── NUMBER INPUT SPINNERS ─────────────── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+  cursor: pointer;
+  height: 100%;
+  padding: 0 6px;
+  background-color: var(--bg-card-hover);
+  border-left: 1px solid var(--border-light);
+  transition: all 0.2s;
+}
+
+input[type="number"]::-webkit-inner-spin-button:hover,
+input[type="number"]::-webkit-outer-spin-button:hover {
+  background-color: var(--color-primary-100);
+}
+
+.dark input[type="number"]::-webkit-inner-spin-button:hover,
+.dark input[type="number"]::-webkit-outer-spin-button:hover {
+  background-color: var(--color-primary-900);
+}

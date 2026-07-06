@@ -17,8 +17,6 @@ export const restaurantSettings = {
     },
   },
   paymentMethods: {
-    paystackEnabled: true,
-    paystackPublicKey: '••••••••••••••••••',
     momoEnabled: true,
     momoProvider: 'MTN Mobile Money',
     momoNumber: '024 567 8900',
@@ -49,7 +47,6 @@ export const restaurantSettings = {
 };
 
 export const paymentProviders = [
-  { id: 'paystack', name: 'Paystack', icon: 'ri-bank-card-line', description: 'Accept card payments online' },
-  { id: 'momo', name: 'Mobile Money', icon: 'ri-smartphone-line', description: 'MTN, Vodafone, AirtelTigo' },
+  { id: 'momo', name: 'Mobile Money', icon: 'ri-smartphone-line', description: 'MTN, Telecel, AT' },
   { id: 'cash', name: 'Cash', icon: 'ri-money-dollar-circle-line', description: 'In-person cash payments' },
 ];

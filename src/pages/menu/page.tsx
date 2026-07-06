@@ -1,10 +1,49 @@
-import { useState, useMemo, useCallback } from 'react';
-import { menuItems, categories } from '@/mocks/menu';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import PageHeader from '@/components/base/PageHeader';
+import { useRefresh } from '@/contexts/RefreshContext';
+import { useOnboarding } from '@/contexts/OnboardingContext';
+import { menuItems, categories as initialCategories } from '@/mocks/menu';
 import type { MenuItem } from '@/mocks/menu';
 import AddEditModal from './components/AddEditModal';
 import ItemDetailModal from './components/ItemDetailModal';
 import DeleteConfirmModal from './components/DeleteConfirmModal';
+import StatusConfirmModal from './components/StatusConfirmModal';
 import Toast from './components/Toast';
+
+function MenuItemCardSkeleton() {
+  return (
+    <div className="relative bg-white dark:bg-foreground-900 rounded-lg border border-background-200 dark:border-foreground-700 overflow-hidden animate-pulse">
+      <div className="h-40 bg-background-200 dark:bg-foreground-800"></div>
+      <div className="p-4 flex flex-col gap-2">
+        <div className="w-3/4 h-5 bg-background-200 dark:bg-foreground-800 rounded"></div>
+        <div className="w-full h-4 bg-background-200 dark:bg-foreground-800 rounded mt-1"></div>
+        <div className="w-2/3 h-4 bg-background-200 dark:bg-foreground-800 rounded"></div>
+        <div className="flex items-center justify-between pt-2">
+          <div className="w-16 h-4 bg-background-200 dark:bg-foreground-800 rounded"></div>
+          <div className="w-11 h-6 bg-background-200 dark:bg-foreground-800 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MenuListRowSkeleton() {
+  return (
+    <div className="flex items-center gap-4 p-3 rounded-lg border bg-white dark:bg-foreground-900 border-background-200 dark:border-foreground-700 animate-pulse">
+      <div className="w-5 h-5 rounded bg-background-200 dark:bg-foreground-800 flex-shrink-0"></div>
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <div className="w-16 h-12 rounded-lg bg-background-200 dark:bg-foreground-800 flex-shrink-0"></div>
+        <div className="flex-1 min-w-0 flex flex-col gap-2">
+          <div className="w-1/3 h-4 bg-background-200 dark:bg-foreground-800 rounded"></div>
+          <div className="w-1/2 h-3 bg-background-200 dark:bg-foreground-800 rounded"></div>
+          <div className="w-16 h-3 bg-background-200 dark:bg-foreground-800 rounded"></div>
+        </div>
+        <div className="w-16 h-5 bg-background-200 dark:bg-foreground-800 rounded flex-shrink-0"></div>
+      </div>
+      <div className="w-11 h-6 bg-background-200 dark:bg-foreground-800 rounded-full flex-shrink-0"></div>
+    </div>
+  );
+}
 
 function MenuItemCard({
   item,
@@ -21,21 +60,19 @@ function MenuItemCard({
 }) {
   return (
     <div
-      className={`relative bg-white dark:bg-foreground-900 rounded-lg border overflow-hidden cursor-pointer hover-lift animate-fade-in-up group ${
-        isSelected
+      className={`relative bg-white dark:bg-foreground-900 rounded-lg border overflow-hidden cursor-pointer hover-lift animate-fade-in-up group ${isSelected
           ? 'border-primary-400 dark:border-primary-600 ring-2 ring-primary-200 dark:ring-primary-800'
           : 'border-background-200 dark:border-foreground-700'
-      } ${!item.available ? 'opacity-60' : ''}`}
+        } ${!item.available ? 'opacity-60' : ''}`}
     >
       {/* Select checkbox */}
       <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onClick={(e) => { e.stopPropagation(); onSelect(item.id, !isSelected); }}
-          className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all cursor-pointer ${
-            isSelected
+          className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all cursor-pointer ${isSelected
               ? 'bg-primary-500 border-primary-500 text-white'
               : 'bg-white dark:bg-foreground-800 border-foreground-300 dark:border-foreground-600 hover:border-primary-400'
-          }`}
+            }`}
         >
           {isSelected && <i className="ri-check-line text-xs"></i>}
         </button>
@@ -52,7 +89,7 @@ function MenuItemCard({
           />
           {!item.available && (
             <div className="absolute inset-0 bg-foreground-900/60 flex items-center justify-center">
-              <span className="text-white font-semibold text-sm font-heading">Sold Out</span>
+              <span className="text-white font-semibold text-sm font-heading px-3 py-1 rounded bg-black/50 backdrop-blur-sm">Sold Out</span>
             </div>
           )}
           {item.popular && (
@@ -69,9 +106,16 @@ function MenuItemCard({
 
         {/* Content */}
         <div className="p-4 flex flex-col gap-1.5">
-          <h3 className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading truncate">
-            {item.name}
-          </h3>
+          <div className="flex justify-between items-start gap-2">
+            <h3 className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading truncate">
+              {item.name}
+            </h3>
+            {(item.requiresPrep !== false && item.prepTime) && (
+              <div className="flex items-center gap-1 text-[10px] font-medium text-foreground-500 bg-background-50 dark:bg-foreground-800 px-1.5 py-0.5 rounded flex-shrink-0 border border-background-100 dark:border-foreground-700">
+                <i className="ri-time-line"></i> {item.prepTime}m
+              </div>
+            )}
+          </div>
           <p className="text-xs text-foreground-400 line-clamp-2 font-body">{item.description}</p>
           <div className="flex items-center justify-between pt-1.5">
             <span className="text-xs text-foreground-400 font-body">{item.category}</span>
@@ -103,30 +147,45 @@ function MenuListRow({
 }) {
   return (
     <div
-      className={`flex items-center gap-4 p-3 rounded-lg border cursor-pointer hover-lift transition-all ${
-        isSelected
+      className={`flex items-center gap-4 p-3 rounded-lg border cursor-pointer hover-lift transition-all ${isSelected
           ? 'bg-primary-50/50 dark:bg-primary-900/10 border-primary-300 dark:border-primary-700'
           : 'bg-white dark:bg-foreground-900 border-background-200 dark:border-foreground-700'
-      } ${!item.available ? 'opacity-60' : ''}`}
+        } ${!item.available ? 'opacity-60' : ''}`}
     >
       <button
         onClick={(e) => { e.stopPropagation(); onSelect(item.id, !isSelected); }}
-        className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${
-          isSelected
+        className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${isSelected
             ? 'bg-primary-500 border-primary-500 text-white'
             : 'border-foreground-300 dark:border-foreground-600 hover:border-primary-400'
-        }`}
+          }`}
       >
         {isSelected && <i className="ri-check-line text-[10px]"></i>}
       </button>
       <div onClick={() => onClick(item.id)} className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer">
-        <div className="w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-background-100 dark:bg-foreground-800">
+        <div className="w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-background-100 dark:bg-foreground-800 relative">
           <img src={item.image} alt={item.name} className="w-full h-full object-cover object-top" loading="lazy" />
+          {!item.available && (
+            <div className="absolute inset-0 bg-foreground-900/50 flex items-center justify-center">
+              <span className="text-white font-bold text-[10px] tracking-wide uppercase">Sold Out</span>
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading truncate">
-            {item.name}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading truncate">
+              {item.name}
+            </h3>
+            {item.popular && (
+              <span className="bg-primary-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">
+                Popular
+              </span>
+            )}
+            {(item.requiresPrep !== false && item.prepTime) && (
+              <span className="flex items-center gap-1 text-[10px] font-medium text-foreground-500 bg-background-50 dark:bg-foreground-800 px-1.5 py-0.5 rounded border border-background-100 dark:border-foreground-700 flex-shrink-0">
+                <i className="ri-time-line"></i> {item.prepTime}m
+              </span>
+            )}
+          </div>
           <p className="text-xs text-foreground-400 mt-0.5 line-clamp-1 font-body">{item.description}</p>
           <span className="text-xs text-foreground-400 mt-0.5 block font-body">{item.category}</span>
         </div>
@@ -145,10 +204,37 @@ function MenuListRow({
 }
 
 export default function MenuManagement() {
+  const { isRefreshing } = useRefresh();
+  const { markStepComplete } = useOnboarding();
   const [items, setItems] = useState<MenuItem[]>(menuItems);
+  const [categories, setCategories] = useState<string[]>(initialCategories);
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  // Custom Category Dropdown State
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedIds(new Set()); // Clear bulk selection when filters change
+  }, [searchQuery, activeCategory]);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -156,6 +242,10 @@ export default function MenuManagement() {
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
   const [bulkDeleteCount, setBulkDeleteCount] = useState<number | null>(null);
+
+  // Status confirm modal
+  const [statusTargetCount, setStatusTargetCount] = useState<number | null>(null);
+  const [isMakingAvailable, setIsMakingAvailable] = useState(false);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -167,7 +257,6 @@ export default function MenuManagement() {
     setToast({ message, type });
   }, []);
 
-  // Derive selected item from items array so toggles always sync
   const selectedItem = useMemo(
     () => (selectedItemId ? items.find((i) => i.id === selectedItemId) : null) ?? null,
     [selectedItemId, items]
@@ -191,13 +280,20 @@ export default function MenuManagement() {
 
   const addItem = useCallback((item: MenuItem) => {
     setItems((prev) => [item, ...prev]);
+    if (!categories.includes(item.category)) {
+      setCategories(prev => [...prev, item.category]);
+    }
     showToast(`${item.name} added to menu`, 'success');
-  }, [showToast]);
+    markStepComplete("menu_item");
+  }, [categories, showToast, markStepComplete]);
 
   const updateItem = useCallback((updatedItem: MenuItem) => {
     setItems((prev) => prev.map((i) => (i.id === updatedItem.id ? updatedItem : i)));
+    if (!categories.includes(updatedItem.category)) {
+      setCategories(prev => [...prev, updatedItem.category]);
+    }
     showToast(`${updatedItem.name} updated`, 'success');
-  }, [showToast]);
+  }, [categories, showToast]);
 
   const deleteItem = useCallback((item: MenuItem) => {
     setItems((prev) => prev.filter((i) => i.id !== item.id));
@@ -218,14 +314,27 @@ export default function MenuManagement() {
     showToast(`${count} items deleted`, 'info');
   }, [selectedIds, showToast]);
 
-  const bulkMarkUnavailable = useCallback(() => {
+  const handleBulkStatusClick = () => {
+    // If all selected items are currently unavailable, then the action is to make them available.
+    // Otherwise, the action is to make them unavailable.
+    const allUnavailable = Array.from(selectedIds).every(id => {
+      const item = items.find(i => i.id === id);
+      return item && !item.available;
+    });
+
+    setIsMakingAvailable(allUnavailable);
+    setStatusTargetCount(selectedIds.size);
+  };
+
+  const confirmBulkStatus = useCallback(() => {
     setItems((prev) =>
-      prev.map((i) => (selectedIds.has(i.id) ? { ...i, available: false } : i))
+      prev.map((i) => (selectedIds.has(i.id) ? { ...i, available: isMakingAvailable } : i))
     );
     const count = selectedIds.size;
     setSelectedIds(new Set());
-    showToast(`${count} items marked as unavailable`, 'warning');
-  }, [selectedIds, showToast]);
+    setStatusTargetCount(null);
+    showToast(`${count} items marked as ${isMakingAvailable ? 'available' : 'sold out'}`, isMakingAvailable ? 'success' : 'warning');
+  }, [selectedIds, isMakingAvailable, showToast]);
 
   const toggleSelect = useCallback((id: number, selected: boolean) => {
     setSelectedIds((prev) => {
@@ -251,54 +360,77 @@ export default function MenuManagement() {
     [items, activeCategory, searchQuery]
   );
 
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredItems.slice(start, start + itemsPerPage);
+  }, [filteredItems, currentPage]);
+
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+
   const toggleSelectAll = useCallback(() => {
-    const allIds = filteredItems.map((i) => i.id);
-    if (selectedIds.size === allIds.length && allIds.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(allIds));
+    const allIds = paginatedItems.map((i) => i.id);
+    // If all items ON CURRENT PAGE are selected, unselect them all. Otherwise select all on page.
+    let allSelected = true;
+    for (const id of allIds) {
+      if (!selectedIds.has(id)) {
+        allSelected = false;
+        break;
+      }
     }
-  }, [selectedIds.size, filteredItems]);
+
+    if (allSelected && allIds.length > 0) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        for (const id of allIds) next.delete(id);
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        for (const id of allIds) next.add(id);
+        return next;
+      });
+    }
+  }, [selectedIds, paginatedItems]);
 
   const handleEdit = useCallback((item: MenuItem) => {
     setEditItem(item);
   }, []);
 
-  const isAllSelected = filteredItems.length > 0 && selectedIds.size === filteredItems.length;
+  const isAllSelected = paginatedItems.length > 0 && paginatedItems.every(i => selectedIds.has(i.id));
+
+  // Determine button text based on selection state
+  const isAllSelectionUnavailable = selectedIds.size > 0 && Array.from(selectedIds).every(id => {
+    const item = items.find(i => i.id === id);
+    return item && !item.available;
+  });
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6 animate-fade-in">
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground-950 dark:text-foreground-100 font-heading">
-            Menu Management
-          </h1>
-          <p className="text-sm text-foreground-400 mt-1 font-body">
-            {items.length} items · {items.filter((i) => !i.available).length} unavailable · across {categories.length - 1} categories
-          </p>
-        </div>
+      <PageHeader
+        title="Menu Management"
+        description={`${items.length} items · ${items.filter((i) => !i.available).length} unavailable · across ${categories.length - 1} categories`}
+      >
         <button
           onClick={() => { setEditItem(null); setShowAddModal(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-all cursor-pointer whitespace-nowrap"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-all cursor-pointer whitespace-nowrap shadow-sm hover:-translate-y-0.5"
         >
           <i className="ri-add-line"></i> Add New Item
         </button>
-      </div>
+      </PageHeader>
 
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-3 bg-primary-50/80 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800 animate-fade-in-up">
           <button
             onClick={toggleSelectAll}
-            className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${
-              isAllSelected
+            className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${isAllSelected
                 ? 'bg-primary-500 border-primary-500 text-white'
                 : 'border-foreground-300 dark:border-foreground-600 hover:border-primary-400'
-            }`}
+              }`}
           >
             {isAllSelected && <i className="ri-check-line text-[10px]"></i>}
           </button>
@@ -307,10 +439,14 @@ export default function MenuManagement() {
           </span>
           <div className="flex-1"></div>
           <button
-            onClick={bulkMarkUnavailable}
-            className="px-3 py-2 rounded-lg text-sm font-medium text-accent-600 dark:text-accent-400 border border-accent-200 dark:border-accent-800 hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-all cursor-pointer whitespace-nowrap"
+            onClick={handleBulkStatusClick}
+            className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer whitespace-nowrap ${isAllSelectionUnavailable
+                ? 'text-primary-600 dark:text-primary-400 border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/20'
+                : 'text-accent-600 dark:text-accent-400 border-accent-200 dark:border-accent-800 hover:bg-accent-50 dark:hover:bg-accent-900/20'
+              }`}
           >
-            <i className="ri-eye-off-line mr-1"></i> Mark Unavailable
+            <i className={`${isAllSelectionUnavailable ? 'ri-check-line' : 'ri-eye-off-line'} mr-1`}></i>
+            {isAllSelectionUnavailable ? 'Mark Available' : 'Mark Unavailable'}
           </button>
           <button
             onClick={() => setBulkDeleteCount(selectedIds.size)}
@@ -321,17 +457,17 @@ export default function MenuManagement() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Toolbar (Inline layout) */}
+      <div className="flex flex-col md:flex-row items-center gap-3 w-full bg-white dark:bg-foreground-900 p-2 rounded-lg border border-background-200 dark:border-foreground-800 shadow-sm">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <div className="relative flex-1 w-full min-w-[200px]">
           <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-foreground-400 text-sm"></i>
           <input
             type="text"
             placeholder="Search menu items..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 placeholder-foreground-400 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 font-body"
+            className="w-full pl-9 pr-4 py-2 rounded-md border-0 bg-transparent text-sm text-foreground-900 dark:text-foreground-100 placeholder-foreground-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 font-body transition-shadow"
           />
           {searchQuery && (
             <button
@@ -343,79 +479,159 @@ export default function MenuManagement() {
           )}
         </div>
 
+        <div className="hidden md:block w-px h-6 bg-background-200 dark:bg-foreground-700"></div>
+
         {/* View Toggle */}
-        <div className="flex bg-background-100 dark:bg-foreground-800 rounded-lg p-0.5">
+        <div className="flex bg-background-50 dark:bg-foreground-800/50 rounded-md p-1 w-full md:w-auto">
           <button
             onClick={() => setViewMode('grid')}
-            className={`px-3 py-1.5 rounded-md text-sm transition-all cursor-pointer ${
-              viewMode === 'grid'
+            className={`flex-1 md:flex-none px-3 py-1.5 rounded text-sm transition-all cursor-pointer ${viewMode === 'grid'
                 ? 'bg-white dark:bg-foreground-700 text-foreground-900 dark:text-foreground-100 shadow-sm'
                 : 'text-foreground-400 hover:text-foreground-600'
-            }`}
+              }`}
           >
             <i className="ri-grid-fill"></i>
           </button>
           <button
             onClick={() => setViewMode('list')}
-            className={`px-3 py-1.5 rounded-md text-sm transition-all cursor-pointer ${
-              viewMode === 'list'
+            className={`flex-1 md:flex-none px-3 py-1.5 rounded text-sm transition-all cursor-pointer ${viewMode === 'list'
                 ? 'bg-white dark:bg-foreground-700 text-foreground-900 dark:text-foreground-100 shadow-sm'
                 : 'text-foreground-400 hover:text-foreground-600'
-            }`}
+              }`}
           >
             <i className="ri-list-unordered"></i>
           </button>
         </div>
-      </div>
 
-      {/* Category Dropdown */}
-      <div className="flex items-center gap-2">
-        <div className="relative">
-          <select
-            value={activeCategory}
-            onChange={(e) => setActiveCategory(e.target.value)}
-            className="appearance-none pl-3 pr-10 py-2 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 cursor-pointer font-body"
+        <div className="hidden md:block w-px h-6 bg-background-200 dark:bg-foreground-700"></div>
+
+        {/* Custom Category Dropdown */}
+        <div className="relative w-full md:w-48" ref={categoryDropdownRef}>
+          <button
+            onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+            className="w-full flex items-center justify-between pl-3 pr-3 py-2 rounded-md border-0 bg-transparent text-sm font-semibold text-foreground-900 dark:text-foreground-100 hover:bg-background-50 dark:hover:bg-foreground-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500/20 cursor-pointer font-body"
           >
-            {categories.map((cat) => {
-              const count = cat === 'All' ? items.length : items.filter((i) => i.category === cat).length;
-              return (
-                <option key={cat} value={cat}>{cat} ({count})</option>
-              );
-            })}
-          </select>
-          <i className="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-foreground-400 pointer-events-none text-sm"></i>
+            <span className="truncate">
+              {activeCategory} {activeCategory === 'All' ? `(${items.length})` : `(${items.filter(i => i.category === activeCategory).length})`}
+            </span>
+            <i className={`ri-arrow-down-s-line text-foreground-400 transition-transform duration-200 ${isCategoryDropdownOpen ? 'rotate-180' : ''}`}></i>
+          </button>
+
+          {isCategoryDropdownOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white dark:bg-foreground-900 rounded-lg shadow-xl border border-background-200 dark:border-foreground-800 py-1 max-h-60 overflow-y-auto animate-fade-in-up">
+              {categories.map((cat) => {
+                const count = cat === 'All' ? items.length : items.filter((i) => i.category === cat).length;
+                const isSelected = activeCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => {
+                      setActiveCategory(cat);
+                      setIsCategoryDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer flex items-center justify-between ${isSelected
+                        ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 font-bold'
+                        : 'text-foreground-700 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800'
+                      }`}
+                  >
+                    <span className="truncate">{cat}</span>
+                    <span className={`text-xs ${isSelected ? 'text-primary-500/70' : 'text-foreground-400'}`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Items */}
-      {filteredItems.length > 0 ? (
-        viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredItems.map((item) => (
-              <MenuItemCard
-                key={item.id}
-                item={item}
-                onToggle={toggleAvailability}
-                onClick={setSelectedItemId}
-                isSelected={selectedIds.has(item.id)}
-                onSelect={toggleSelect}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {filteredItems.map((item) => (
-              <MenuListRow
-                key={item.id}
-                item={item}
-                onToggle={toggleAvailability}
-                onClick={setSelectedItemId}
-                isSelected={selectedIds.has(item.id)}
-                onSelect={toggleSelect}
-              />
-            ))}
-          </div>
-        )
+      {/* Items List */}
+      {isRefreshing ? (
+        <div className="flex flex-col gap-6">
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[400px] content-start">
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <MenuItemCardSkeleton key={`skel-grid-${idx}`} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 min-h-[400px]">
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <MenuListRowSkeleton key={`skel-list-${idx}`} />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : paginatedItems.length > 0 ? (
+        <div className="flex flex-col gap-6">
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[400px] content-start">
+              {paginatedItems.map((item) => (
+                <MenuItemCard
+                  key={item.id}
+                  item={item}
+                  onToggle={toggleAvailability}
+                  onClick={setSelectedItemId}
+                  isSelected={selectedIds.has(item.id)}
+                  onSelect={toggleSelect}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 min-h-[400px]">
+              {paginatedItems.map((item) => (
+                <MenuListRow
+                  key={item.id}
+                  item={item}
+                  onToggle={toggleAvailability}
+                  onClick={setSelectedItemId}
+                  isSelected={selectedIds.has(item.id)}
+                  onSelect={toggleSelect}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-background-200 dark:border-foreground-800 pt-4 mt-2">
+              <span className="text-sm text-foreground-500 font-body">
+                Showing <span className="font-semibold text-foreground-900 dark:text-foreground-100">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-semibold text-foreground-900 dark:text-foreground-100">{Math.min(currentPage * itemsPerPage, filteredItems.length)}</span> of <span className="font-semibold text-foreground-900 dark:text-foreground-100">{filteredItems.length}</span> items
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-50 dark:hover:bg-foreground-800 transition-colors"
+                >
+                  <i className="ri-arrow-left-s-line"></i>
+                </button>
+                <div className="flex gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-semibold transition-colors ${currentPage === page
+                          ? 'bg-primary-500 text-white shadow-sm'
+                          : 'text-foreground-600 hover:bg-background-50 dark:hover:bg-foreground-800'
+                        }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-background-50 dark:hover:bg-foreground-800 transition-colors"
+                >
+                  <i className="ri-arrow-right-s-line"></i>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-16">
           <div className="w-16 h-16 rounded-2xl bg-background-100 dark:bg-foreground-800 flex items-center justify-center mb-4">
@@ -445,6 +661,7 @@ export default function MenuManagement() {
           onClose={() => { setShowAddModal(false); setEditItem(null); }}
           onSave={editItem ? updateItem : addItem}
           editItem={editItem}
+          categories={categories.filter(c => c !== 'All')}
         />
       )}
 
@@ -475,6 +692,15 @@ export default function MenuManagement() {
         onConfirm={bulkDelete}
         isBulk
         count={bulkDeleteCount ?? 0}
+      />
+
+      {/* Bulk Status Confirmation */}
+      <StatusConfirmModal
+        isOpen={statusTargetCount !== null}
+        onCancel={() => setStatusTargetCount(null)}
+        onConfirm={confirmBulkStatus}
+        count={statusTargetCount ?? 0}
+        isMakingAvailable={isMakingAvailable}
       />
     </div>
   );

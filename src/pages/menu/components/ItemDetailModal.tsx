@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import type { MenuItem } from '@/mocks/menu';
+import type { MenuItem } from '@/types/menu';
 
 interface ItemDetailModalProps {
   item: MenuItem;

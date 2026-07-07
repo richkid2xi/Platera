@@ -1,28 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PageHeader from '@/components/base/PageHeader';
 import PageSkeleton from '@/components/base/PageSkeleton';
 import CustomSelect from '@/components/base/CustomSelect';
 import { useRefresh } from '@/contexts/RefreshContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { salesData, dateRangeOptions } from '@/mocks/reports';
+import { apiClient } from '@/api/client';
+
+const dateRangeOptions = [
+  { label: 'Today', value: 'today' },
+  { label: 'This Week', value: 'week' },
+  { label: 'This Month', value: 'month' },
+  { label: 'Last 7 Days', value: '7days' },
+  { label: 'Last 30 Days', value: '30days' },
+];
 
 export default function Reports() {
   const { isRefreshing } = useRefresh();
   const [dateRange, setDateRange] = useState('week');
   const [chartView, setChartView] = useState<'revenue' | 'orders'>('revenue');
 
+  const [reportData, setReportData] = useState<any>(null);
+
+  useEffect(() => {
+    apiClient.get(`/reports?period=${dateRange}`)
+      .then(res => setReportData(res.data))
+      .catch(console.error);
+  }, [dateRange, isRefreshing]);
+
   const COLORS = ['#FF6B35', '#FFC107', '#4DB696', '#BA9174'];
 
   const formatCurrency = (val: number) => `GH₵ ${val.toLocaleString()}`;
 
-  const summaryCards = [
-    { label: 'Total Revenue', value: salesData.summary.totalRevenue, change: salesData.summary.revenueChange, up: true, icon: 'ri-money-dollar-circle-line', color: 'text-secondary-500 bg-secondary-50 dark:bg-secondary-900/20' },
-    { label: 'Total Orders', value: salesData.summary.totalOrders.toLocaleString(), change: salesData.summary.ordersChange, up: true, icon: 'ri-shopping-bag-3-line', color: 'text-primary-500 bg-primary-50 dark:bg-primary-900/20' },
-    { label: 'Avg Order Value', value: salesData.summary.avgOrderValue, change: salesData.summary.avgChange, up: true, icon: 'ri-line-chart-line', color: 'text-accent-500 bg-accent-50 dark:bg-accent-900/20' },
-    { label: 'Top Category', value: salesData.summary.topCategory, change: salesData.summary.topCategoryShare, up: true, icon: 'ri-restaurant-2-line', color: 'text-foreground-500 bg-background-100 dark:bg-foreground-800', upLabel: 'of revenue' },
-  ];
+  const summaryCards = reportData ? [
+    { label: 'Total Revenue', value: reportData.summary.totalRevenue, change: reportData.summary.revenueChange, up: true, icon: 'ri-money-dollar-circle-line', color: 'text-secondary-500 bg-secondary-50 dark:bg-secondary-900/20' },
+    { label: 'Total Orders', value: reportData.summary.totalOrders.toLocaleString(), change: reportData.summary.ordersChange, up: true, icon: 'ri-shopping-bag-3-line', color: 'text-primary-500 bg-primary-50 dark:bg-primary-900/20' },
+    { label: 'Avg Order Value', value: reportData.summary.avgOrderValue, change: reportData.summary.avgChange, up: true, icon: 'ri-line-chart-line', color: 'text-accent-500 bg-accent-50 dark:bg-accent-900/20' },
+    { label: 'Top Category', value: reportData.summary.topCategory, change: reportData.summary.topCategoryShare, up: true, icon: 'ri-restaurant-2-line', color: 'text-foreground-500 bg-background-100 dark:bg-foreground-800', upLabel: 'of revenue' },
+  ] : [];
 
-  if (isRefreshing) return <PageSkeleton />;
+  if (isRefreshing || !reportData) return <PageSkeleton />;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -86,7 +102,7 @@ export default function Reports() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={salesData.daily} barSize={32} barGap={4}>
+            <BarChart data={reportData.daily} barSize={32} barGap={4}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
               <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} dy={8} />
               <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} dx={-4} />
@@ -111,7 +127,7 @@ export default function Reports() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={salesData.categoryBreakdown}
+                  data={reportData.categoryBreakdown}
                   cx="50%"
                   cy="50%"
                   innerRadius={55}
@@ -119,7 +135,7 @@ export default function Reports() {
                   paddingAngle={4}
                   dataKey="value"
                 >
-                  {salesData.categoryBreakdown.map((_entry, index) => (
+                  {reportData.categoryBreakdown.map((_entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                   ))}
                 </Pie>
@@ -131,7 +147,7 @@ export default function Reports() {
             </ResponsiveContainer>
           </div>
           <div className="space-y-2 mt-3">
-            {salesData.categoryBreakdown.map((cat, i) => (
+            {reportData.categoryBreakdown.map((cat: any, i: number) => (
               <div key={cat.name} className="flex items-center justify-between text-sm font-body">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i] }}></span>
@@ -150,7 +166,7 @@ export default function Reports() {
         <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
           <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-5">Payment Methods</h3>
           <div className="space-y-5 mt-2">
-            {salesData.paymentMethods.map((method) => (
+            {reportData.paymentMethods.map((method: any) => (
               <div key={method.method}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">{method.method}</span>
@@ -172,7 +188,7 @@ export default function Reports() {
           <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-4">Recent Transactions</h3>
           <div className="flex-1 overflow-y-auto pr-2 -mr-2">
             <div className="space-y-4">
-              {salesData.recentTransactions.map((tx) => (
+              {reportData.recentTransactions.map((tx: any) => (
                 <div key={tx.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-background-100 dark:bg-foreground-800 flex items-center justify-center text-foreground-600 dark:text-foreground-300">
@@ -213,7 +229,7 @@ export default function Reports() {
                 </tr>
               </thead>
               <tbody>
-                {salesData.bestSellersReport.map((item, i) => (
+                {reportData.bestSellersReport.map((item: any, i: number) => (
                   <tr key={item.id} className={`border-b border-background-100 dark:border-foreground-800 last:border-b-0 ${i % 2 === 0 ? '' : ''}`}>
                     <td className="py-3 pr-3">
                       <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">{item.name}</span>
@@ -237,7 +253,7 @@ export default function Reports() {
         <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
           <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-4">Table Performance</h3>
           <div className="space-y-3">
-            {salesData.tablePerformance.map((t) => (
+            {reportData.tablePerformance.map((t: any) => (
               <div key={t.table} className="flex items-center justify-between py-2.5 border-b border-background-100 dark:border-foreground-800 last:border-b-0">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-background-100 dark:bg-foreground-800 flex items-center justify-center text-xs font-bold text-foreground-500 font-heading">

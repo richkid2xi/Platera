@@ -2,33 +2,7 @@ import { useState, useEffect, useRef, type FormEvent } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { staffMembers, allRoles } from "@/mocks/staff";
 import ShutterImagePanel from "@/components/feature/ShutterImagePanel";
-
-// ── Mock credentials panel ─────────────────────────────────────────
-const MOCK_PASSWORD = "platera123";
-
-const ROLE_COLOR: Record<string, { bg: string; text: string }> = {
-  Owner:                { bg: "bg-primary-50 dark:bg-primary-900/20",     text: "text-primary-600 dark:text-primary-400" },
-  Manager:              { bg: "bg-accent-50 dark:bg-accent-900/20",       text: "text-accent-600 dark:text-accent-400" },
-  Accountant:           { bg: "bg-blue-50 dark:bg-blue-900/20",           text: "text-blue-600 dark:text-blue-400" },
-  "Kitchen Supervisor": { bg: "bg-orange-50 dark:bg-orange-900/20",       text: "text-orange-600 dark:text-orange-400" },
-  Cook:                 { bg: "bg-yellow-50 dark:bg-yellow-900/20",       text: "text-yellow-700 dark:text-yellow-400" },
-  Waitress:             { bg: "bg-pink-50 dark:bg-pink-900/20",           text: "text-pink-600 dark:text-pink-400" },
-  Waiter:               { bg: "bg-indigo-50 dark:bg-indigo-900/20",       text: "text-indigo-600 dark:text-indigo-400" },
-  Bartender:            { bg: "bg-teal-50 dark:bg-teal-900/20",           text: "text-teal-600 dark:text-teal-400" },
-  Host:                 { bg: "bg-secondary-50 dark:bg-secondary-900/20", text: "text-secondary-600 dark:text-secondary-400" },
-  Cleaner:              { bg: "bg-foreground-100 dark:bg-foreground-800", text: "text-foreground-600 dark:text-foreground-400" },
-};
-
-const MOCK_ACCOUNTS = staffMembers.filter((s) => s.status === "active" && s.role === "Owner");
-
-function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-}
-function getRoleIcon(role: string) {
-  return allRoles.find((r) => r.role === role)?.icon ?? "ri-user-line";
-}
 
 // ── Animated counter hook ──────────────────────────────────────────
 function useCountUp(target: number, duration = 1800, start = false) {
@@ -96,7 +70,6 @@ export default function SignIn() {
   const [isLoading, setIsLoading] = useState(false);
   const stateError = (location.state as { error?: string })?.error;
   const [error, setError] = useState<string | null>(stateError || null);
-  const [showMockPanel, setShowMockPanel] = useState(false);
   const [statsVisible, setStatsVisible] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
 
@@ -136,18 +109,11 @@ export default function SignIn() {
       setIsLoading(true);
       await signIn(email, password);
       navigate(from, { replace: true });
-    } catch {
-      setError("Invalid email or password. Try a mock account below ↓");
-      setShowMockPanel(true);
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Invalid email or password.");
     } finally {
       setIsLoading(false);
     }
-  }
-
-  function quickLogin(memberEmail: string) {
-    setEmail(memberEmail);
-    setPassword(MOCK_PASSWORD);
-    setError(null);
   }
 
   return (
@@ -329,75 +295,7 @@ export default function SignIn() {
             </button>
           </form>
 
-          {/* ── Mock credentials panel ── */}
-          <div className="mt-6 rounded-2xl border border-dashed border-primary-200 dark:border-primary-800/60 overflow-hidden">
-            <button
-              id="mock-accounts-toggle"
-              type="button"
-              onClick={() => setShowMockPanel((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100/70 dark:hover:bg-primary-900/30 transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-5 h-5 rounded-md bg-primary-500/20 dark:bg-primary-500/30 flex items-center justify-center">
-                  <i className="ri-flask-line text-primary-600 dark:text-primary-400 text-xs" />
-                </div>
-                <span className="text-xs font-bold text-primary-700 dark:text-primary-400 uppercase tracking-wider">
-                  Dev — Mock Accounts
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-primary-500 font-mono bg-primary-100 dark:bg-primary-900/40 px-2 py-0.5 rounded-md">
-                  pw: {MOCK_PASSWORD}
-                </span>
-                <i className={`ri-arrow-down-s-line text-primary-500 transition-transform duration-200 ${showMockPanel ? "rotate-180" : ""}`} />
-              </div>
-            </button>
 
-            {showMockPanel && (
-              <div className="max-h-52 overflow-y-auto divide-y divide-background-100 dark:divide-foreground-800/60 animate-fade-in">
-                {MOCK_ACCOUNTS.map((member) => {
-                  const colors = ROLE_COLOR[member.role] ?? ROLE_COLOR["Cleaner"];
-                  const isSelected = email === member.email;
-                  return (
-                    <button
-                      key={member.id}
-                      id={`mock-account-${member.id}`}
-                      type="button"
-                      onClick={() => quickLogin(member.email)}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                        isSelected
-                          ? "bg-primary-50 dark:bg-primary-900/20"
-                          : "bg-white dark:bg-foreground-900 hover:bg-background-50 dark:hover:bg-foreground-800/60"
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg ${colors.bg} flex items-center justify-center shrink-0 border border-white dark:border-foreground-700`}>
-                        <span className={`text-xs font-black font-heading ${colors.text}`}>
-                          {getInitials(member.name)}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-semibold text-foreground-800 dark:text-foreground-200 truncate">
-                            {member.name}
-                          </p>
-                          {isSelected && <i className="ri-check-circle-fill text-primary-500 text-xs shrink-0" />}
-                        </div>
-                        <p className="text-[11px] text-foreground-400 dark:text-foreground-500 truncate font-mono">
-                          {member.email}
-                        </p>
-                      </div>
-                      <div className={`flex items-center gap-1 px-2 py-0.5 rounded-lg ${colors.bg} shrink-0`}>
-                        <i className={`${getRoleIcon(member.role)} text-[10px] ${colors.text}`} />
-                        <span className={`text-[10px] font-semibold ${colors.text} whitespace-nowrap`}>
-                          {member.role}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
 
           {/* Footer */}
           <p className="text-center text-sm text-foreground-500 dark:text-foreground-400 mt-6">

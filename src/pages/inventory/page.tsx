@@ -6,19 +6,16 @@ import PageSkeleton from '@/components/base/PageSkeleton';
 import CustomSelect from '@/components/base/CustomSelect';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRefresh } from '@/contexts/RefreshContext';
-import { inventoryItems, inventoryCategories, recentSales } from '@/mocks/inventory';
-import type { SaleRecord } from '@/mocks/inventory';
+import { apiClient } from '@/api/client';
 
 interface InventoryItem {
-  id: number;
+  id: string;
   name: string;
-  category: string;
-  stock: number;
-  threshold: number;
-  lastRestocked: string;
-  costPerUnit: string;
-  image: string;
-  expiryDate: string;
+  unit: string;
+  currentStock: number | string;
+  lowStockThreshold: number | string;
+  supplier?: string;
+  lastRestockedAt?: string;
 }
 
 export default function Inventory() {
@@ -27,33 +24,59 @@ export default function Inventory() {
   const isStaff = user?.role === 'staff';
 
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All');
-  const [showRestock, setShowRestock] = useState<number | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState('All Categories');
+  const inventoryCategories = ['All Categories', 'Proteins', 'Produce', 'Dairy', 'Dry Goods', 'Beverages', 'Packaging'];
+  const [showRestock, setShowRestock] = useState<string | null>(null);
   const [restockAmount, setRestockAmount] = useState('');
-  const [showSell, setShowSell] = useState<number | null>(null);
+  const [showSell, setShowSell] = useState<string | null>(null);
   const [sellAmount, setSellAmount] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [items, setItems] = useState<InventoryItem[]>(inventoryItems);
-  const [salesLog, setSalesLog] = useState<SaleRecord[]>(recentSales);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [salesLog, setSalesLog] = useState<any[]>([]);
   const [toast, setToast] = useState('');
   const [toastType, setToastType] = useState<'success' | 'warning'>('success');
 
   const [showItemModal, setShowItemModal] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [isCustomCategory, setIsCustomCategory] = useState(false);
-  const [customCategory, setCustomCategory] = useState('');
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<InventoryItem | null>(null);
 
   // Modal Form State
   const [formData, setFormData] = useState({
     name: '',
-    category: 'Drinks',
-    stock: 0,
-    threshold: 10,
-    costPerUnit: 'GH₵ 0.00',
-    image: '',
-    expiryDate: '',
+    unit: 'pcs',
+    currentStock: 0,
+    lowStockThreshold: 10,
+    supplier: '',
   });
+
+  const fetchInventory = async () => {
+    try {
+      const [invRes, logRes] = await Promise.all([
+        apiClient.get('/inventory'),
+        apiClient.get('/inventory/logs')
+      ]);
+      setItems(invRes.data);
+      setSalesLog(logRes.data.map((log: any) => {
+        const d = new Date(log.createdAt);
+        return {
+          id: log.id,
+          itemName: log.inventoryItem.name,
+          category: log.inventoryItem.supplier || 'N/A',
+          qty: Math.abs(log.changeAmount),
+          unitPrice: 0,
+          total: 0,
+          date: d.toLocaleDateString(),
+          time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+      }));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    fetchInventory();
+  }, [isRefreshing]);
 
   const { setUnsavedDiff, checkUnsaved, unsavedDiff } = useUnsavedChanges();
 
@@ -65,10 +88,9 @@ export default function Inventory() {
     const diffs: string[] = [];
     if (editingItem) {
       if (formData.name !== editingItem.name) diffs.push(`Name changed to <b>${formData.name}</b>`);
-      if (formData.stock !== editingItem.stock) diffs.push(`Stock changed to <b>${formData.stock}</b>`);
-      if (formData.costPerUnit !== editingItem.costPerUnit) diffs.push(`Cost changed to <b>${formData.costPerUnit}</b>`);
+      if (formData.currentStock !== Number(editingItem.currentStock)) diffs.push(`Stock changed to <b>${formData.currentStock}</b>`);
     } else {
-      if (formData.name || formData.stock > 0) {
+      if (formData.name || formData.currentStock > 0) {
         diffs.push(`New unsaved item: <b>${formData.name || 'Untitled'}</b>`);
       }
     }
@@ -83,24 +105,18 @@ export default function Inventory() {
   };
 
   const filtered = items.filter((item) => {
-    const matchSearch = item.name.toLowerCase().includes(search.toLowerCase());
-    const matchCategory = categoryFilter === 'All' || item.category === categoryFilter;
-    return matchSearch && matchCategory;
+    return item.name.toLowerCase().includes(search.toLowerCase());
   });
 
   const openAddModal = () => {
     setEditingItem(null);
     setFormData({
       name: '',
-      category: 'Drinks',
-      stock: 0,
-      threshold: 10,
-      costPerUnit: 'GH₵ 0.00',
-      image: '',
-      expiryDate: '',
+      unit: 'pcs',
+      currentStock: 0,
+      lowStockThreshold: 10,
+      supplier: '',
     });
-    setIsCustomCategory(false);
-    setCustomCategory('');
     setShowItemModal(true);
   };
 
@@ -108,26 +124,15 @@ export default function Inventory() {
     setEditingItem(item);
     setFormData({
       name: item.name,
-      category: item.category,
-      stock: item.stock,
-      threshold: item.threshold,
-      costPerUnit: item.costPerUnit,
-      image: item.image,
-      expiryDate: item.expiryDate,
+      unit: item.unit,
+      currentStock: Number(item.currentStock),
+      lowStockThreshold: Number(item.lowStockThreshold),
+      supplier: item.supplier || '',
     });
-
-    // Check if category is standard
-    if (!inventoryCategories.includes(item.category) && item.category !== 'All') {
-      setIsCustomCategory(true);
-      setCustomCategory(item.category);
-    } else {
-      setIsCustomCategory(false);
-      setCustomCategory('');
-    }
     setShowItemModal(true);
   };
 
-  const saveItem = () => {
+  const saveItem = async () => {
     if (!formData.name) {
       setToast('Item name is required');
       setToastType('warning');
@@ -135,109 +140,99 @@ export default function Inventory() {
       return;
     }
 
-    const finalCategory = isCustomCategory ? customCategory || formData.category : formData.category;
+    try {
+      if (editingItem) {
+        await apiClient.put(`/inventory/${editingItem.id}`, formData);
+        setToast('Item updated successfully!');
+      } else {
+        await apiClient.post('/inventory', formData);
+        setToast('Item added successfully!');
+      }
 
-    if (editingItem) {
-      setItems(prev => prev.map(item =>
-        item.id === editingItem.id ? { ...item, ...formData, category: finalCategory } : item
-      ));
-      setToast('Item updated successfully!');
-    } else {
-      const newItem: InventoryItem = {
-        id: Date.now(),
-        ...formData,
-        category: finalCategory,
-        lastRestocked: new Date().toISOString().split('T')[0],
-      };
-      setItems(prev => [newItem, ...prev]);
-      setToast('Item added successfully!');
+      await fetchInventory();
+
+      setToastType('success');
+      setUnsavedDiff([]);
+      setShowItemModal(false);
+      setTimeout(() => setToast(''), 3000);
+    } catch (err: any) {
+      setToast(err.response?.data?.error || 'Failed to save item');
+      setToastType('warning');
+      setTimeout(() => setToast(''), 3000);
     }
+  };
 
-    setToastType('success');
-    setUnsavedDiff([]);
-    setShowItemModal(false);
+  const deleteItem = async (id: string) => {
+    // Note: Backend might not support deletion of inventory items yet
+    // If not supported, we'd need to add a status=INACTIVE field.
+    setToast('Item deleted locally (API delete not implemented)');
+    setToastType('warning');
     setTimeout(() => setToast(''), 3000);
   };
 
-  const deleteItem = (id: number) => {
-    setItems(prev => prev.filter(item => item.id !== id));
-    setToast('Item deleted');
-    setToastType('success');
-    setTimeout(() => setToast(''), 3000);
-  };
-
-  const handleRestock = (id: number) => {
+  const handleRestock = async (id: string) => {
     if (isStaff) return; // Prevent restock for staff
     const amount = parseInt(restockAmount);
     if (!amount || amount <= 0) return;
-    setItems((prev) => prev.map((item) =>
-      item.id === id
-        ? {
-          ...item,
-          stock: item.stock + amount,
-          lastRestocked: new Date().toISOString().split('T')[0],
-        }
-        : item
-    ));
-    setToast('Stock updated successfully!');
-    setToastType('success');
-    setShowRestock(null);
-    setRestockAmount('');
-    setTimeout(() => setToast(''), 3000);
+
+    try {
+      await apiClient.post(`/inventory/${id}/log`, {
+        reason: 'RESTOCK',
+        changeAmount: amount,
+      });
+      await fetchInventory();
+      setToast('Stock updated successfully!');
+      setToastType('success');
+      setShowRestock(null);
+      setRestockAmount('');
+      setTimeout(() => setToast(''), 3000);
+    } catch (err: any) {
+      setToast(err.response?.data?.error || 'Failed to restock');
+      setToastType('warning');
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
-  const handleSell = (id: number) => {
+  const handleSell = async (id: string) => {
     const qty = parseInt(sellAmount);
     if (!qty || qty <= 0) return;
     const item = items.find((i) => i.id === id);
     if (!item) return;
-    const price = parseFloat(item.costPerUnit.replace(/[^0-9.]/g, '')) || 0;
-    if (qty > item.stock) {
-      setToast(`Not enough stock! Only ${item.stock} available.`);
+    
+    if (qty > Number(item.currentStock)) {
+      setToast(`Not enough stock! Only ${item.currentStock} available.`);
       setToastType('warning');
       setTimeout(() => setToast(''), 3000);
       return;
     }
-    const newStock = item.stock - qty;
-    setItems((prev) => prev.map((i) =>
-      i.id === id
-        ? {
-          ...i,
-          stock: newStock,
-        }
-        : i
-    ));
 
-    const now = new Date();
-    const saleEntry: SaleRecord = {
-      id: Date.now(),
-      itemName: item.name,
-      category: item.category,
-      qty,
-      unitPrice: price || 0,
-      total: price ? price * qty : 0,
-      date: now.toISOString().split('T')[0],
-      time: now.toTimeString().slice(0, 5),
-    };
-    setSalesLog((prev) => [saleEntry, ...prev]);
-
-    const revenueText = price ? ` - GH₵ ${(price * qty).toFixed(2)} revenue` : '';
-    setToast(`${qty} of ${item.name} sold${revenueText}!`);
-    setToastType('success');
-    setShowSell(null);
-    setSellAmount('');
-    setTimeout(() => setToast(''), 3000);
+    try {
+      await apiClient.post(`/inventory/${id}/log`, {
+        reason: 'USAGE',
+        changeAmount: -qty,
+      });
+      await fetchInventory();
+      
+      setToast(`${qty} of ${item.name} used/sold!`);
+      setToastType('success');
+      setShowSell(null);
+      setSellAmount('');
+      setTimeout(() => setToast(''), 3000);
+    } catch (err: any) {
+      setToast(err.response?.data?.error || 'Failed to log usage');
+      setToastType('warning');
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
 
   const totalItems = items.length;
-  const lowStockCount = items.filter(i => (i.stock / i.threshold) <= 1 && (i.stock / i.threshold) > 0.5).length;
-  const criticalCount = items.filter(i => (i.stock / i.threshold) <= 0.5).length;
-  const healthyCount = items.filter(i => (i.stock / i.threshold) > 1).length;
+  const lowStockCount = items.filter(i => (Number(i.currentStock) / Number(i.lowStockThreshold)) <= 1 && (Number(i.currentStock) / Number(i.lowStockThreshold)) > 0.5).length;
+  const criticalCount = items.filter(i => (Number(i.currentStock) / Number(i.lowStockThreshold)) <= 0.5).length;
+  const healthyCount = items.filter(i => (Number(i.currentStock) / Number(i.lowStockThreshold)) > 1).length;
 
-  const totalSalesToday = salesLog
-    .filter((s) => s.date === new Date().toISOString().split('T')[0])
-    .reduce((sum, s) => sum + s.total, 0);
+  const totalSalesToday = 0; // Removing sales aggregation from inventory side, rely on dashboard or reports
+
 
   if (isRefreshing) return <PageSkeleton />;
 
@@ -331,30 +326,32 @@ export default function Inventory() {
             filtered.map((item, i) => {
               return (
                 <div key={item.id} className={`grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 px-5 py-4 items-center hover:bg-background-50 dark:hover:bg-foreground-800/50 transition-colors stagger-${Math.min(i + 1, 8)}`}>
-                  {/* Item Name & Image */}
+                  {/* Item Name */}
                   <div className="md:col-span-5 flex items-center gap-3">
-                    <img src={item.image} alt={item.name} className="w-10 h-10 rounded-lg object-cover bg-background-100 dark:bg-foreground-800" />
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-background-100 dark:bg-foreground-800 text-foreground-400">
+                      <i className="ri-box-3-line text-xl"></i>
+                    </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body truncate">
                         {item.name}
                       </p>
-                      <p className="text-xs text-foreground-400 font-body">{item.costPerUnit}</p>
+                      <p className="text-xs text-foreground-400 font-body">{item.unit}</p>
                     </div>
                   </div>
 
-                  {/* Category */}
+                  {/* Supplier (Replacing Category) */}
                   <div className="md:col-span-2 hidden md:block">
-                    <span className="text-sm text-foreground-600 dark:text-foreground-300 font-body">{item.category}</span>
+                    <span className="text-sm text-foreground-600 dark:text-foreground-300 font-body">{item.supplier || '-'}</span>
                   </div>
 
                   {/* Stock Level */}
                   <div className="md:col-span-3">
                     <div className="flex items-center gap-1.5">
                       <span className="text-lg font-bold text-foreground-950 dark:text-foreground-100 font-heading">
-                        {item.stock}
+                        {Number(item.currentStock)}
                       </span>
                       <span className="text-sm font-semibold text-foreground-400 font-body">
-                        / {item.threshold}
+                        / {Number(item.lowStockThreshold)}
                       </span>
                     </div>
                   </div>
@@ -420,28 +417,20 @@ export default function Inventory() {
                       <div className="absolute inset-0 bg-black/40 modal-backdrop" onClick={() => setShowSell(null)}></div>
                       <div className="relative bg-white dark:bg-foreground-900 rounded-2xl p-6 w-full max-w-sm shadow-xl animate-scale-in">
                         <h3 className="text-lg font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-1">Record Sale</h3>
-                        <p className="text-sm text-foreground-500 mb-4 font-body">{item.name} <span className="text-xs text-foreground-400">({item.stock} in stock)</span></p>
+                        <p className="text-sm text-foreground-500 mb-4 font-body">{item.name} <span className="text-xs text-foreground-400">({Number(item.currentStock)} in stock)</span></p>
                         <div className="flex flex-col gap-3 mb-4">
                           <div>
                             <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Quantity Sold (units)</label>
                             <input
                               type="number"
                               min="1"
-                              max={item.stock}
+                              max={Number(item.currentStock)}
                               value={sellAmount}
                               onChange={(e) => setSellAmount(e.target.value)}
                               className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
-                              placeholder={`Max: ${item.stock} units`}
+                              placeholder={`Max: ${Number(item.currentStock)} units`}
                             />
                           </div>
-                          {sellAmount && (
-                            <div className="bg-background-50 dark:bg-foreground-800 rounded-lg px-4 py-2.5 flex items-center justify-between">
-                              <span className="text-sm text-foreground-600 dark:text-foreground-300 font-body">Estimated Revenue</span>
-                              <span className="text-sm font-bold text-secondary-600 dark:text-secondary-400 font-heading">
-                                GH₵ {(parseFloat(item.costPerUnit.replace(/[^0-9.]/g, '')) * parseInt(sellAmount) || 0).toFixed(2)}
-                              </span>
-                            </div>
-                          )}
                         </div>
                         <div className="flex gap-3">
                           <button onClick={() => setShowSell(null)} className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-lg border border-background-200 dark:border-foreground-800 text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer whitespace-nowrap font-body">Cancel</button>
@@ -567,102 +556,24 @@ export default function Inventory() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Category</label>
-                  <CustomSelect
-                    value={isCustomCategory ? 'Custom' : formData.category}
-                    onChange={(val) => {
-                      if (val === 'Custom') {
-                        setIsCustomCategory(true);
-                      } else {
-                        setIsCustomCategory(false);
-                        setFormData({ ...formData, category: val });
-                      }
-                    }}
-                    options={[
-                      ...inventoryCategories.filter(c => c !== 'All').map(c => ({ label: c, value: c })),
-                      { label: 'Add New Category...', value: 'Custom' }
-                    ]}
-                  />
-                  {isCustomCategory && (
-                    <input
-                      type="text"
-                      placeholder="Enter custom category"
-                      value={customCategory}
-                      onChange={(e) => setCustomCategory(e.target.value)}
-                      className="w-full px-3 py-2 mt-2 bg-background-50 dark:bg-foreground-900 border border-background-200 dark:border-foreground-800 rounded-lg text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-500 font-body"
-                    />
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Expiry Date</label>
-                  <input
-                    type="date"
-                    value={formData.expiryDate}
-                    onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                    className="w-full px-3 py-2 bg-background-50 dark:bg-foreground-900 border border-background-200 dark:border-foreground-800 rounded-lg text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-500 font-body"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Cost Per Unit</label>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Unit</label>
                   <input
                     type="text"
-                    value={formData.costPerUnit}
-                    onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
+                    value={formData.unit}
+                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                     className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
-                    placeholder="e.g. GH₵ 5.00"
+                    placeholder="e.g. pcs, kg, boxes"
                   />
                 </div>
-              </div>
-
-              <div className="mb-4 mt-4">
-                <label className="block text-sm font-medium text-foreground-700 dark:text-foreground-300 mb-2 font-body">Item Image</label>
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="w-full sm:w-40 h-40 sm:h-32 rounded-lg border-2 border-dashed border-background-200 dark:border-foreground-700 bg-background-50 dark:bg-foreground-800 flex-shrink-0 overflow-hidden flex items-center justify-center relative group">
-                    {formData.image ? (
-                      <img
-                        src={formData.image}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-1 text-foreground-400">
-                        <i className="ri-image-add-line text-2xl"></i>
-                        <span className="text-xs font-body">No image</span>
-                      </div>
-                    )}
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-                    >
-                      <i className="ri-camera-fill text-white text-2xl drop-shadow-md"></i>
-                    </div>
-                  </div>
-                  <div className="flex-1 flex flex-col gap-3 justify-center">
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-800 text-sm font-semibold text-foreground-700 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-700 transition-colors shadow-sm"
-                      >
-                        <i className="ri-upload-cloud-2-line"></i>
-                        Upload Photo
-                      </button>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        className="hidden"
-                        accept="image/*"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            setFormData({ ...formData, image: URL.createObjectURL(e.target.files[0]) });
-                          }
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-foreground-500 font-body">
-                      Recommended size: 800x800px (1:1 ratio).<br />Max file size: 5MB.
-                    </p>
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Supplier (Optional)</label>
+                  <input
+                    type="text"
+                    value={formData.supplier}
+                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                    className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                    placeholder="Supplier name"
+                  />
                 </div>
               </div>
 
@@ -672,8 +583,8 @@ export default function Inventory() {
                   <input
                     type="number"
                     min="0"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
+                    value={formData.currentStock}
+                    onChange={(e) => setFormData({ ...formData, currentStock: parseInt(e.target.value) || 0 })}
                     className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
                   />
                 </div>
@@ -682,8 +593,8 @@ export default function Inventory() {
                   <input
                     type="number"
                     min="1"
-                    value={formData.threshold}
-                    onChange={(e) => setFormData({ ...formData, threshold: parseInt(e.target.value) || 10 })}
+                    value={formData.lowStockThreshold}
+                    onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value) || 10 })}
                     className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
                   />
                 </div>
@@ -716,7 +627,7 @@ export default function Inventory() {
                   Delete {deleteConfirmItem.name}?
                 </h3>
                 <p className="text-sm text-foreground-500 font-body">
-                  This will permanently remove <span className="font-semibold text-foreground-700 dark:text-foreground-300">{deleteConfirmItem.name}</span> ({deleteConfirmItem.stock} units) from inventory. This cannot be undone.
+                  This will permanently remove <span className="font-semibold text-foreground-700 dark:text-foreground-300">{deleteConfirmItem.name}</span> ({Number(deleteConfirmItem.currentStock)} units) from inventory. This cannot be undone.
                 </p>
               </div>
               <div className="flex w-full gap-3">

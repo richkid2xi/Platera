@@ -3,21 +3,28 @@ import PageHeader from '@/components/base/PageHeader';
 import PageSkeleton from '@/components/base/PageSkeleton';
 import CustomSelect from '@/components/base/CustomSelect';
 import { useRefresh } from '@/contexts/RefreshContext';
-import { mockAuditLogs, type AuditLogEntry } from '@/mocks/audit';
+import { apiClient } from '@/api/client';
+import { useEffect } from 'react';
 
 export default function AuditLog() {
   const { isRefreshing } = useRefresh();
-  const [logs] = useState<AuditLogEntry[]>(mockAuditLogs);
+  const [logs, setLogs] = useState<any[]>([]);
   const [filterType, setFilterType] = useState('All Events');
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
+  useEffect(() => {
+    apiClient.get('/audit-logs')
+      .then(res => setLogs(res.data))
+      .catch(console.error);
+  }, [isRefreshing]);
+
   const filteredLogs = logs.filter(log => {
+    const actorName = log.user?.name || 'System';
     const matchesSearch = log.action.toLowerCase().includes(search.toLowerCase()) ||
-      log.details.toLowerCase().includes(search.toLowerCase()) ||
-      log.actor.name.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filterType === 'All Events' || log.actionType.toLowerCase() === filterType.toLowerCase();
+      actorName.toLowerCase().includes(search.toLowerCase());
+    const matchesFilter = filterType === 'All Events' || (log.entityType && log.entityType.toLowerCase() === filterType.toLowerCase());
     return matchesSearch && matchesFilter;
   });
 
@@ -96,20 +103,20 @@ export default function AuditLog() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-700 dark:text-primary-400 text-xs font-bold">
-                        {log.actor.name.charAt(0)}
+                        {(log.user?.name || 'S').charAt(0)}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading leading-none mb-1">{log.actor.name}</p>
-                        <span className="text-xs text-foreground-500 font-body px-2 py-0.5 rounded-full bg-background-100 dark:bg-foreground-800">{log.actor.role}</span>
+                        <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading leading-none mb-1">{log.user?.name || 'System'}</p>
+                        <span className="text-xs text-foreground-500 font-body px-2 py-0.5 rounded-full bg-background-100 dark:bg-foreground-800">{log.user?.role || 'SYSTEM'}</span>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getActionIcon(log.actionType)}`}>
-                        <i className={getActionIcon(log.actionType).split(' ')[0]}></i>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getActionIcon(log.entityType)}`}>
+                        <i className={getActionIcon(log.entityType).split(' ')[0]}></i>
                       </div>
-                      <span className="text-sm font-medium text-foreground-900 dark:text-foreground-100 font-body">
+                      <span className="text-sm font-medium text-foreground-900 dark:text-foreground-100 font-body max-w-sm truncate">
                         {log.action}
                       </span>
                     </div>
@@ -117,14 +124,8 @@ export default function AuditLog() {
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-1 max-w-md">
                       <span className="text-sm text-foreground-600 dark:text-foreground-300 font-body">
-                        {log.details}
+                        {log.entityType} - {log.entityId}
                       </span>
-                      {log.metadata && log.actionType === 'ORDER' && (
-                        <div className="flex gap-2 mt-1">
-                          <span className="text-xs px-2 py-1 rounded bg-secondary-50 dark:bg-secondary-900/20 text-secondary-600 dark:text-secondary-400 font-medium">Value: GH₵ {log.metadata.value.toFixed(2)}</span>
-                          <span className="text-xs px-2 py-1 rounded bg-background-100 dark:bg-foreground-800 text-foreground-500 font-medium uppercase">{log.metadata.method}</span>
-                        </div>
-                      )}
                     </div>
                   </td>
                 </tr>

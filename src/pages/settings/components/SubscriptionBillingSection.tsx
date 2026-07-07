@@ -1,45 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/api/client';
 import {
   formatDate,
   formatShortDate,
   daysRemaining,
   countdownTo,
-  MOCK_BILLING_HISTORY,
-  type SubscriptionStatus,
 } from '@/utils/subscription';
-
-// ── Dev switcher ──────────────────────────────────────────────────────────
-const STATUS_LABELS: { key: SubscriptionStatus; label: string; color: string }[] = [
-  { key: 'trial',        label: 'Trial',        color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  { key: 'active',       label: 'Active',       color: 'bg-secondary-100 text-secondary-700 dark:bg-secondary-900/30 dark:text-secondary-400' },
-  { key: 'grace_period', label: 'Grace Period', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
-  { key: 'locked',       label: 'Locked',       color: 'bg-foreground-100 text-foreground-600 dark:bg-foreground-800 dark:text-foreground-400' },
-];
-
-function DevSwitcher() {
-  const { subscription, setStatus } = useSubscription();
-  return (
-    <div className="p-3 rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 mb-5">
-      <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-1.5 uppercase tracking-wider">
-        <i className="ri-flask-line" /> Dev State Switcher — remove before prod
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {STATUS_LABELS.map(({ key, label, color }) => (
-          <button
-            key={key}
-            onClick={() => setStatus(key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${color} ${
-              subscription.status === key ? 'ring-2 ring-amber-400 dark:ring-amber-600' : 'opacity-70 hover:opacity-100'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── Countdown display ─────────────────────────────────────────────────────
 function GraceCountdown({ endDate }: { endDate: Date }) {
@@ -54,6 +22,75 @@ function GraceCountdown({ endDate }: { endDate: Date }) {
     <span className="font-mono font-black text-amber-600 dark:text-amber-400 tabular-nums">
       {pad(time.hours)}:{pad(time.minutes)}:{pad(time.seconds)}
     </span>
+  );
+}
+
+// ── Billing History (real data) ──────────────────────────────────────────
+function BillingHistory() {
+  const { data: history = [], isLoading } = useQuery<any[]>({
+    queryKey: ['billing-history'],
+    queryFn: async () => {
+      const res = await apiClient.get('/subscription/billing-history');
+      return res.data;
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-16 text-foreground-400 text-sm">
+        <i className="ri-loader-4-line animate-spin mr-2" />Loading billing history...
+      </div>
+    );
+  }
+
+  if (history.length === 0) {
+    return (
+      <p className="text-sm text-foreground-400 dark:text-foreground-500 text-center py-4">
+        No payment history yet.
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-background-200 dark:border-foreground-700 overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-background-50 dark:bg-foreground-800/50 border-b border-background-200 dark:border-foreground-700">
+            <th className="text-left px-4 py-2.5 text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider">Date</th>
+            <th className="text-left px-4 py-2.5 text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider">Description</th>
+            <th className="text-right px-4 py-2.5 text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider">Amount</th>
+            <th className="text-right px-4 py-2.5 text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider">Status</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-background-100 dark:divide-foreground-800">
+          {history.map((entry: any) => (
+            <tr key={entry.id} className="hover:bg-background-50 dark:hover:bg-foreground-800/30 transition-colors">
+              <td className="px-4 py-3 text-foreground-600 dark:text-foreground-400 whitespace-nowrap">
+                {formatShortDate(new Date(entry.createdAt))}
+              </td>
+              <td className="px-4 py-3 text-foreground-800 dark:text-foreground-200 font-medium">
+                Platera Pro — Monthly
+              </td>
+              <td className="px-4 py-3 text-right font-mono font-semibold text-foreground-900 dark:text-foreground-100">
+                GHS {Number(entry.amount).toFixed(0)}
+              </td>
+              <td className="px-4 py-3 text-right">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  entry.status === 'SUCCESS'
+                    ? 'bg-secondary-50 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-400'
+                    : entry.status === 'FAILED'
+                    ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                    : 'bg-background-100 dark:bg-foreground-800 text-foreground-500'
+                }`}>
+                  <i className={entry.status === 'SUCCESS' ? 'ri-check-line' : entry.status === 'FAILED' ? 'ri-close-line' : 'ri-time-line'} />
+                  {entry.status === 'SUCCESS' ? 'Paid' : entry.status === 'FAILED' ? 'Failed' : 'Pending'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -78,9 +115,8 @@ function TrialState() {
             </span>{' '}
             after your trial ends.
           </p>
-          {/* Trial progress bar */}
           <div className="mt-3">
-            <div className="flex justify-between text-xs text-foreground-400 mb-1">
+            <div className="flex items-center justify-between text-[10px] font-semibold text-blue-500/70 mb-1">
               <span>Day 1</span>
               <span>Day 14</span>
             </div>
@@ -160,45 +196,7 @@ function ActiveState() {
         <h4 className="text-sm font-bold text-foreground-700 dark:text-foreground-300 uppercase tracking-wider mb-3">
           Billing History
         </h4>
-        <div className="rounded-xl border border-background-200 dark:border-foreground-700 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-background-50 dark:bg-foreground-800/50 border-b border-background-200 dark:border-foreground-700">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider">Date</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider">Description</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider">Amount</th>
-                <th className="text-right px-4 py-2.5 text-xs font-semibold text-foreground-500 dark:text-foreground-400 uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-background-100 dark:divide-foreground-800">
-              {MOCK_BILLING_HISTORY.map((entry) => (
-                <tr key={entry.id} className="hover:bg-background-50 dark:hover:bg-foreground-800/30 transition-colors">
-                  <td className="px-4 py-3 text-foreground-600 dark:text-foreground-400 whitespace-nowrap">
-                    {formatShortDate(entry.date)}
-                  </td>
-                  <td className="px-4 py-3 text-foreground-800 dark:text-foreground-200 font-medium">
-                    {entry.description}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold text-foreground-900 dark:text-foreground-100">
-                    GHS {entry.amount}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      entry.status === 'paid'
-                        ? 'bg-secondary-50 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-400'
-                        : entry.status === 'failed'
-                        ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                        : 'bg-background-100 dark:bg-foreground-800 text-foreground-500'
-                    }`}>
-                      <i className={entry.status === 'paid' ? 'ri-check-line' : entry.status === 'failed' ? 'ri-close-line' : 'ri-refund-2-line'} />
-                      {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <BillingHistory />
       </div>
     </div>
   );
@@ -255,8 +253,6 @@ export default function SubscriptionBillingSection() {
 
   return (
     <div className="space-y-5">
-      <DevSwitcher />
-
       <div className="flex items-center justify-between mb-1">
         <div>
           <h3 className="text-base font-bold text-foreground-900 dark:text-foreground-100 font-heading">

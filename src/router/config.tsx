@@ -9,6 +9,7 @@ import MenuManagement from "../pages/menu/page";
 import Tables from "../pages/tables/page";
 import Inventory from "../pages/inventory/page";
 import Reports from "../pages/reports/page";
+import Reconciliation from "../pages/reconciliation/page";
 import Feedback from "../pages/feedback/page";
 import Staff from "../pages/staff/page";
 import Settings from "../pages/settings/page";
@@ -18,7 +19,13 @@ import SignIn from "../pages/auth/SignIn";
 import SignUp from "../pages/auth/SignUp";
 import Terms from "../pages/legal/Terms";
 import Privacy from "../pages/legal/Privacy";
-import OrderPlaceholder from "../pages/order/page";
+import CustomerLayout from "../pages/order/layout";
+import CustomerMenu from "../pages/order/menu/page";
+import CustomerCart from "../pages/order/cart/page";
+import CustomerCheckout from "../pages/order/checkout/page";
+import CustomerPayment from "../pages/order/payment/page";
+import CustomerOrderStatus from "../pages/order/order-status/page";
+import CustomerFeedback from "../pages/order/feedback/page";
 
 const routes: RouteObject[] = [
   // ── Public auth / legal routes ──
@@ -27,7 +34,19 @@ const routes: RouteObject[] = [
   { path: "/sign-up", element: <SignUp /> },
   { path: "/terms", element: <Terms /> },
   { path: "/privacy", element: <Privacy /> },
-  { path: "/order/:token", element: <OrderPlaceholder /> },
+  {
+    path: "/order/:token",
+    element: <CustomerLayout />,
+    children: [
+      { index: true, element: <CustomerMenu /> },
+      { path: "menu", element: <CustomerMenu /> },
+      { path: "cart", element: <CustomerCart /> },
+      { path: "checkout", element: <CustomerCheckout /> },
+      { path: "payment", element: <CustomerPayment /> },
+      { path: "order-status", element: <CustomerOrderStatus /> },
+      { path: "feedback", element: <CustomerFeedback /> },
+    ],
+  },
 
   // ── Protected app routes ──
   {
@@ -42,6 +61,7 @@ const routes: RouteObject[] = [
           { path: "/tables", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/tables']}><Tables /></ProtectedRoute> },
           { path: "/inventory", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/inventory']}><Inventory /></ProtectedRoute> },
           { path: "/reports", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/reports']}><Reports /></ProtectedRoute> },
+          { path: "/reconciliation", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/reconciliation']}><Reconciliation /></ProtectedRoute> },
           { path: "/feedback", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/feedback']}><Feedback /></ProtectedRoute> },
           { path: "/staff", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/staff']}><Staff /></ProtectedRoute> },
           { path: "/settings", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/settings']}><Settings /></ProtectedRoute> },

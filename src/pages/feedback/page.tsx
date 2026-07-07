@@ -3,17 +3,78 @@ import PageHeader from '@/components/base/PageHeader';
 import PageSkeleton from '@/components/base/PageSkeleton';
 import CustomSelect from '@/components/base/CustomSelect';
 import { useRefresh } from '@/contexts/RefreshContext';
-import { feedbackEntries, insightBanners } from '@/mocks/feedback';
+import { apiClient } from '@/api/client';
+import { useEffect } from 'react';
 
 export default function Feedback() {
   const { isRefreshing } = useRefresh();
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [entries, setEntries] = useState(feedbackEntries);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [entries, setEntries] = useState<any[]>([]);
+  const [insightBanners, setInsightBanners] = useState<any[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [feedbackRes, insightsRes] = await Promise.all([
+          apiClient.get('/feedback'),
+          apiClient.get('/feedback/insights')
+        ]);
+        
+        const mappedEntries = feedbackRes.data.map((f: any) => ({
+          id: f.id,
+          table: f.table?.tableNumber || 'Unknown',
+          date: f.createdAt,
+          rating: f.overallRating,
+          comment: f.comment || 'No comment provided.',
+          flagged: f.overallRating < 3,
+          reviewed: f.isReviewed,
+          tags: f.overallRating >= 4 ? ['Great Service'] : [],
+          itemRatings: (f.itemRatings || []).map((ir: any) => ({
+            item: ir.menuItem?.name || 'Unknown Item',
+            rating: ir.thumbsUp ? 5 : 1
+          }))
+        }));
+        setEntries(mappedEntries);
+
+        const banners = [];
+        const { problematicItems, lowRatingsByDay } = insightsRes.data;
+        if (problematicItems && problematicItems.length > 0) {
+          banners.push({
+            id: 1,
+            type: 'critical',
+            icon: 'ri-alert-line',
+            message: `${problematicItems[0].name} has received ${problematicItems[0].downvotes} negative ratings recently.`
+          });
+        }
+        if (lowRatingsByDay && lowRatingsByDay.length > 0) {
+          banners.push({
+            id: 2,
+            type: 'warning',
+            icon: 'ri-time-line',
+            message: `Most low ratings occur on ${lowRatingsByDay[0].dayOfWeek}s. Consider increasing staff during these times.`
+          });
+        }
+        if (banners.length === 0) {
+          banners.push({
+            id: 3,
+            type: 'info',
+            icon: 'ri-thumb-up-line',
+            message: `Customer satisfaction is looking great! No major issues detected.`
+          });
+        }
+        setInsightBanners(banners);
+
+      } catch (err) {
+        console.error('Failed to load feedback', err);
+      }
+    };
+    loadData();
+  }, [isRefreshing]);
 
   const filtered = entries.filter((entry) => {
     if (ratingFilter !== null && entry.rating !== ratingFilter) return false;
@@ -26,8 +87,13 @@ export default function Feedback() {
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const toggleReviewed = (id: number) => {
-    setEntries((prev) => prev.map((e) => e.id === id ? { ...e, reviewed: !e.reviewed } : e));
+  const toggleReviewed = async (id: string) => {
+    try {
+      await apiClient.patch(`/feedback/${id}/reviewed`);
+      setEntries((prev) => prev.map((e) => e.id === id ? { ...e, reviewed: true } : e));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const renderStars = (rating: number) => {
@@ -147,7 +213,7 @@ export default function Feedback() {
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-heading bg-background-100 dark:bg-foreground-800 px-2 py-0.5 rounded-md">Review #{entry.id}</span>
+                        <span className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-heading bg-background-100 dark:bg-foreground-800 px-2 py-0.5 rounded-md">Review #{entry.id.substring(0,6)}</span>
                         <span className="text-xs font-semibold text-foreground-500 font-body">· Table {entry.table}</span>
                         <span className="text-xs text-foreground-400 font-body">· {formatDate(entry.date)}</span>
                       </div>

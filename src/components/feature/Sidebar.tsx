@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { NAV_PERMISSIONS } from '@/config/permissions';
 import { useUnsavedChanges } from '@/contexts/UnsavedChangesContext';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/api/client';
 
 interface NavItem {
   label: string;
@@ -15,11 +17,12 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: 'ri-dashboard-3-line' },
-  { label: 'Live Orders', path: '/orders', icon: 'ri-list-check-2', badge: 5 },
+  { label: 'Live Orders', path: '/orders', icon: 'ri-list-check-2' },
   { label: 'Menu Management', path: '/menu', icon: 'ri-restaurant-2-line' },
   { label: 'Tables', path: '/tables', icon: 'ri-layout-grid-line' },
   { label: 'Inventory', path: '/inventory', icon: 'ri-archive-line' },
   { label: 'Sales & Reports', path: '/reports', icon: 'ri-bar-chart-2-line' },
+  { label: 'Reconciliation', path: '/reconciliation', icon: 'ri-scales-3-line' },
   { label: 'Feedback', path: '/feedback', icon: 'ri-chat-smile-2-line' },
   { label: 'Staff', path: '/staff', icon: 'ri-team-line' },
   { label: 'Settings', path: '/settings', icon: 'ri-settings-3-line' },
@@ -38,6 +41,18 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
   const { theme, toggleTheme } = useTheme();
   const { checkUnsaved } = useUnsavedChanges();
   const navigate = useNavigate();
+
+  // Fetch real order counts for badge
+  const { data: orders = [] } = useQuery<any[]>({
+    queryKey: ['orders'],
+    queryFn: async () => {
+      const res = await apiClient.get('/orders');
+      return res.data;
+    },
+    refetchInterval: 30000,
+  });
+
+  const newOrdersCount = orders.filter(o => o.status === 'NEW').length;
 
   const handleNav = (e: MouseEvent, path?: string) => {
     if (path) {
@@ -77,6 +92,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
             if (user && !NAV_PERMISSIONS[item.path]?.includes(user.role)) {
               return null;
             }
+            const badgeCount = item.path === '/orders' ? newOrdersCount : item.badge;
             return (
               <li key={item.path}>
                 <NavLink
@@ -94,18 +110,18 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                     <>
                       <div className="w-5 h-5 flex items-center justify-center flex-shrink-0 relative">
                         <i className={`${item.icon} text-lg ${isActive ? 'text-primary-500 dark:text-primary-400' : ''}`}></i>
-                        {collapsed && !mobileOpen && item.badge && (
+                        {collapsed && !mobileOpen && badgeCount > 0 && (
                           <span className="absolute -top-2 -right-3 w-4 h-4 bg-primary-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                            {item.badge}
+                            {badgeCount}
                           </span>
                         )}
                       </div>
                       {(!collapsed || mobileOpen) && (
                         <>
                           <span className="text-sm font-medium flex-1 text-left font-body">{item.label}</span>
-                          {item.badge && (
+                          {badgeCount > 0 && (
                             <span className="bg-primary-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                              {item.badge}
+                              {badgeCount}
                             </span>
                           )}
                         </>

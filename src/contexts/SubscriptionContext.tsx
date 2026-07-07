@@ -1,98 +1,122 @@
 import {
   createContext,
   useContext,
-  useState,
   useCallback,
+  useState,
   type ReactNode,
 } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/api/client';
 import {
   type SubscriptionState,
   type SubscriptionStatus,
-  DEFAULT_SUBSCRIPTION,
-  addDays,
   addMonths,
+  addDays,
 } from '@/utils/subscription';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SubscriptionContextValue {
   subscription: SubscriptionState;
-  setStatus: (status: SubscriptionStatus) => void;
-  simulateRenewal: () => void;
+  isLoading: boolean;
   showPaymentModal: boolean;
   openPaymentModal: () => void;
   closePaymentModal: () => void;
   renewalSuccess: boolean;
   dismissRenewalSuccess: () => void;
+  // Dev-only setStatus (no-op in prod since data comes from API)
+  setStatus: (status: SubscriptionStatus) => void;
+  simulateRenewal: () => void;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextValue | undefined>(undefined);
 
-// DEV-ONLY: mock states for each status (for the switcher)
-const STATUS_MOCKS: Record<SubscriptionStatus, Partial<SubscriptionState>> = {
-  trial: {
-    status: 'trial',
-    trialEndsAt: addDays(new Date(), 9),
-    currentPeriodEndsAt: null,
-    gracePeriodEndsAt: null,
-  },
-  active: {
-    status: 'active',
-    trialEndsAt: addDays(new Date(), -5),
-    currentPeriodEndsAt: addDays(new Date(), 22),
-    gracePeriodEndsAt: null,
-  },
-  grace_period: {
-    status: 'grace_period',
-    trialEndsAt: addDays(new Date(), -35),
-    currentPeriodEndsAt: addDays(new Date(), -1),
-    gracePeriodEndsAt: addDays(new Date(), 2), // 48h left in grace
-  },
-  locked: {
-    status: 'locked',
-    trialEndsAt: addDays(new Date(), -40),
-    currentPeriodEndsAt: addDays(new Date(), -6),
-    gracePeriodEndsAt: addDays(new Date(), -3),
-  },
+// Map backend enum values to frontend types
+function mapStatus(backendStatus: string): SubscriptionStatus {
+  switch (backendStatus) {
+    case 'TRIAL': return 'trial';
+    case 'ACTIVE': return 'active';
+    case 'GRACE_PERIOD': return 'grace_period';
+    case 'LOCKED': return 'locked';
+    default: return 'trial';
+  }
+}
+
+const PLAN_PRICE = 250;
+const PLAN_NAME = 'Platera Pro';
+
+const DEFAULT_SUBSCRIPTION: SubscriptionState = {
+  status: 'trial',
+  trialEndsAt: addDays(new Date(), 14),
+  currentPeriodEndsAt: null,
+  gracePeriodEndsAt: null,
+  planPrice: PLAN_PRICE,
+  planName: PLAN_NAME,
 };
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
-  const [subscription, setSubscription] = useState<SubscriptionState>(DEFAULT_SUBSCRIPTION);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [renewalSuccess, setRenewalSuccess] = useState(false);
 
-  const setStatus = useCallback((status: SubscriptionStatus) => {
-    setSubscription((prev) => ({
-      ...prev,
-      ...STATUS_MOCKS[status],
-    }));
-  }, []);
+  // Fetch real subscription status from API (only for OWNER)
+  const { data: apiSubscription, isLoading } = useQuery({
+    queryKey: ['subscription-status'],
+    queryFn: async () => {
+      const res = await apiClient.get('/subscription/status');
+      return res.data;
+    },
+    enabled: !!user && user.role === 'OWNER',
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: false,
+  });
 
-  const simulateRenewal = useCallback(() => {
-    const now = new Date();
-    setSubscription((prev) => ({
-      ...prev,
-      status: 'active',
-      currentPeriodEndsAt: addMonths(now, 1),
-      gracePeriodEndsAt: null,
-    }));
-    setShowPaymentModal(false);
-    setRenewalSuccess(true);
-  }, []);
+  // Build subscription state from API data
+  const subscription: SubscriptionState = apiSubscription
+    ? {
+        status: mapStatus(apiSubscription.subscriptionStatus),
+        trialEndsAt: apiSubscription.trialEndsAt
+          ? new Date(apiSubscription.trialEndsAt)
+          : addDays(new Date(), 14),
+        currentPeriodEndsAt: apiSubscription.currentPeriodEndsAt
+          ? new Date(apiSubscription.currentPeriodEndsAt)
+          : null,
+        gracePeriodEndsAt: apiSubscription.gracePeriodEndsAt
+          ? new Date(apiSubscription.gracePeriodEndsAt)
+          : null,
+        planPrice: PLAN_PRICE,
+        planName: PLAN_NAME,
+      }
+    : DEFAULT_SUBSCRIPTION;
 
   const openPaymentModal = useCallback(() => setShowPaymentModal(true), []);
   const closePaymentModal = useCallback(() => setShowPaymentModal(false), []);
   const dismissRenewalSuccess = useCallback(() => setRenewalSuccess(false), []);
 
+  // After Paystack confirms payment, invalidate the subscription query so it refetches from backend
+  const simulateRenewal = useCallback(() => {
+    setShowPaymentModal(false);
+    setRenewalSuccess(true);
+    queryClient.invalidateQueries({ queryKey: ['subscription-status'] });
+  }, [queryClient]);
+
+  // No-op for non-OWNER users (context remains valid without throwing)
+  const setStatus = useCallback((_: SubscriptionStatus) => {
+    // This was used by DevSwitcher — now removed. No-op.
+  }, []);
+
   return (
     <SubscriptionContext.Provider
       value={{
         subscription,
-        setStatus,
-        simulateRenewal,
+        isLoading,
         showPaymentModal,
         openPaymentModal,
         closePaymentModal,
         renewalSuccess,
         dismissRenewalSuccess,
+        setStatus,
+        simulateRenewal,
       }}
     >
       {children}

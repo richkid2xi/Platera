@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRefresh } from '@/contexts/RefreshContext';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/api/client';
 
 interface TopBarProps {
   sidebarCollapsed: boolean;
@@ -50,11 +52,59 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const notifications = [
-    { id: 1, type: 'order', message: 'New order from Table 7', time: '2 min ago', read: false },
-    { id: 2, type: 'stock', message: 'Coca-Cola running low (3 left)', time: '15 min ago', read: false },
-    { id: 3, type: 'order', message: 'Table 3 order is ready for serving', time: '28 min ago', read: true },
-    { id: 4, type: 'alert', message: 'Negative feedback from Table 9', time: '1 hour ago', read: true },
+  // Fetch data for notifications
+  const { data: orders = [] } = useQuery<any[]>({
+    queryKey: ['orders'],
+    queryFn: async () => {
+      const res = await apiClient.get('/orders');
+      return res.data;
+    },
+    refetchInterval: 30000,
+  });
+
+  const { data: inventory = [] } = useQuery<any[]>({
+    queryKey: ['inventory'],
+    queryFn: async () => {
+      const res = await apiClient.get('/inventory');
+      return res.data;
+    },
+    refetchInterval: 60000,
+  });
+
+  // Build notifications dynamically
+  const dynamicNotifications: any[] = [];
+  
+  // 1. New orders
+  const newOrders = orders.filter(o => o.status === 'NEW');
+  newOrders.forEach((order, index) => {
+    dynamicNotifications.push({
+      id: `order-${order.id}`,
+      type: 'order',
+      message: `New order from Table ${order.table?.tableNumber || 'Unknown'}`,
+      time: new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      read: false,
+      timestamp: new Date(order.createdAt).getTime()
+    });
+  });
+
+  // 2. Low stock inventory
+  const lowStockItems = inventory.filter(i => Number(i.currentStock) <= Number(i.lowStockThreshold));
+  lowStockItems.forEach(item => {
+    dynamicNotifications.push({
+      id: `stock-${item.id}`,
+      type: 'stock',
+      message: `${item.name} running low (${item.currentStock} left)`,
+      time: 'Recently',
+      read: false,
+      timestamp: Date.now() - 1000 // Ensure they show up but orders might be newer
+    });
+  });
+
+  // Sort notifications by timestamp descending (newest first)
+  dynamicNotifications.sort((a, b) => b.timestamp - a.timestamp);
+
+  const notifications = dynamicNotifications.length > 0 ? dynamicNotifications : [
+    { id: 'empty', type: 'info', message: 'No new notifications', time: '', read: true }
   ];
 
   const getNotifIcon = (type: string) => {
@@ -66,7 +116,7 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.read && n.id !== 'empty').length;
 
   return (
     <header

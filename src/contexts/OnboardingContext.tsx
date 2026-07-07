@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 
 export type OnboardingStepId = "menu_item" | "upload_logo" | "review_tables" | "invite_staff";
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useUnsavedChanges } from '@/contexts/UnsavedChangesContext';
-import type { MenuItem } from '@/mocks/menu';
+import type { MenuItem } from '@/types/menu';
 
 interface AddEditModalProps {
   isOpen: boolean;
@@ -23,6 +23,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
     price: '',
     category: categories[0] || 'Mains',
     imageUrl: '',
+    imageFile: null as File | null,
     popular: false,
     requiresPrep: true,
     prepTime: 15,
@@ -75,6 +76,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
         price: String(editItem.price),
         category: categories.includes(editItem.category) ? editItem.category : 'custom',
         imageUrl: editItem.image,
+        imageFile: null,
         popular: editItem.popular,
         requiresPrep: editItem.requiresPrep ?? true,
         prepTime: editItem.prepTime ?? 15,
@@ -91,7 +93,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
       setImagePreview(editItem.image);
       setImageError(false);
     } else {
-      setForm({ name: '', description: '', price: '', category: categories[0] || 'Mains', imageUrl: '', popular: false, requiresPrep: true, prepTime: 15 });
+      setForm({ name: '', description: '', price: '', category: categories[0] || 'Mains', imageUrl: '', imageFile: null, popular: false, requiresPrep: true, prepTime: 15 });
       setIsCustomCategory(false);
       setCustomCategoryName('');
       setVariants([]);
@@ -104,7 +106,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
   if (!isOpen) return null;
 
   const handleImageUrlChange = (url: string) => {
-    setForm(prev => ({ ...prev, imageUrl: url }));
+    setForm(prev => ({ ...prev, imageUrl: url, imageFile: null }));
     setImagePreview(url);
     setImageError(false);
   };
@@ -116,7 +118,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result as string;
-      setForm(prev => ({ ...prev, imageUrl: result }));
+      setForm(prev => ({ ...prev, imageFile: file, imageUrl: result }));
       setImagePreview(result);
       setImageError(false);
     };
@@ -175,13 +177,14 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
       price: basePrice,
       category: finalCategory,
       image: finalImage,
+      imageFile: form.imageFile,
       available: editItem ? editItem.available : true,
       popular: form.popular,
       requiresPrep: form.requiresPrep,
       prepTime: form.requiresPrep ? form.prepTime : undefined,
       variants: variants.length > 0 ? variants : undefined,
       addOns: addOns.length > 0 ? addOns : undefined,
-    });
+    } as any);
     setUnsavedDiff([]);
     onClose();
   };

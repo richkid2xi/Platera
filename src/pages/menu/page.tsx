@@ -1,14 +1,15 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '@/components/base/PageHeader';
 import { useRefresh } from '@/contexts/RefreshContext';
 import { useOnboarding } from '@/contexts/OnboardingContext';
-import { menuItems, categories as initialCategories } from '@/mocks/menu';
-import type { MenuItem } from '@/mocks/menu';
+import type { MenuItem } from '@/types/menu';
 import AddEditModal from './components/AddEditModal';
 import ItemDetailModal from './components/ItemDetailModal';
 import DeleteConfirmModal from './components/DeleteConfirmModal';
 import StatusConfirmModal from './components/StatusConfirmModal';
 import Toast from './components/Toast';
+import { apiClient } from '@/api/client';
 
 function MenuItemCardSkeleton() {
   return (
@@ -80,13 +81,19 @@ function MenuItemCard({
 
       <div onClick={() => onClick(item.id)}>
         {/* Image */}
-        <div className="relative h-40 overflow-hidden">
-          <img
-            src={item.image}
-            alt={item.name}
-            className="w-full h-full object-cover object-top"
-            loading="lazy"
-          />
+        <div className="relative h-40 overflow-hidden bg-background-100 dark:bg-foreground-800">
+          {item.image ? (
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-full h-full object-cover object-top"
+              loading="lazy"
+            />
+          ) : (
+             <div className="w-full h-full flex items-center justify-center text-foreground-400">
+               <i className="ri-restaurant-line text-3xl"></i>
+             </div>
+          )}
           {!item.available && (
             <div className="absolute inset-0 bg-foreground-900/60 flex items-center justify-center">
               <span className="text-white font-semibold text-sm font-heading px-3 py-1 rounded bg-black/50 backdrop-blur-sm">Sold Out</span>
@@ -163,7 +170,13 @@ function MenuListRow({
       </button>
       <div onClick={() => onClick(item.id)} className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer">
         <div className="w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-background-100 dark:bg-foreground-800 relative">
-          <img src={item.image} alt={item.name} className="w-full h-full object-cover object-top" loading="lazy" />
+          {item.image ? (
+            <img src={item.image} alt={item.name} className="w-full h-full object-cover object-top" loading="lazy" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-foreground-400">
+               <i className="ri-restaurant-line text-xl"></i>
+            </div>
+          )}
           {!item.available && (
             <div className="absolute inset-0 bg-foreground-900/50 flex items-center justify-center">
               <span className="text-white font-bold text-[10px] tracking-wide uppercase">Sold Out</span>
@@ -206,8 +219,24 @@ function MenuListRow({
 export default function MenuManagement() {
   const { isRefreshing } = useRefresh();
   const { markStepComplete } = useOnboarding();
-  const [items, setItems] = useState<MenuItem[]>(menuItems);
-  const [categories, setCategories] = useState<string[]>(initialCategories);
+  const queryClient = useQueryClient();
+
+  // Categories include { id, name, displayOrder, items: MenuItem[] }
+  const { data: categoryData = [], isLoading } = useQuery({
+    queryKey: ['menu'],
+    queryFn: async () => {
+      const res = await apiClient.get('/menu');
+      return res.data;
+    }
+  });
+
+  const categories = ['All', ...categoryData.map((c: any) => c.name)];
+  const items: MenuItem[] = categoryData.flatMap((c: any) => c.items);
+  const categoryIdMap = categoryData.reduce((acc: any, c: any) => {
+    acc[c.name] = c.id;
+    return acc;
+  }, {});
+
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -239,7 +268,7 @@ export default function MenuManagement() {
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [editItem, setEditItem] = useState<MenuItem | null>(null);
-  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
   const [bulkDeleteCount, setBulkDeleteCount] = useState<number | null>(null);
 
@@ -248,12 +277,12 @@ export default function MenuManagement() {
   const [isMakingAvailable, setIsMakingAvailable] = useState(false);
 
   // Bulk selection
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
 
   // Toast
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' | 'error' } | null>(null);
 
-  const showToast = useCallback((message: string, type: 'success' | 'info' | 'warning' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'info' | 'warning' | 'error' = 'success') => {
     setToast({ message, type });
   }, []);
 
@@ -262,61 +291,174 @@ export default function MenuManagement() {
     [selectedItemId, items]
   );
 
-  const toggleAvailability = useCallback((id: number) => {
-    setItems((prev) => {
-      const updated = prev.map((item) =>
-        item.id === id ? { ...item, available: !item.available } : item
-      );
-      const toggled = updated.find((i) => i.id === id);
-      if (toggled) {
-        const msg = toggled.available
-          ? `${toggled.name} is now available`
-          : `${toggled.name} marked as sold out`;
-        showToast(msg, toggled.available ? 'success' : 'warning');
+  const mutationAvailability = useMutation({
+    mutationFn: async (args: { id: string | number, available: boolean }) => {
+      const res = await apiClient.patch(`/menu/items/${args.id}/availability`, { available: args.available });
+      return res.data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['menu'] });
+      const item = items.find(i => i.id === variables.id);
+      if (item) {
+        showToast(`${item.name} is now ${variables.available ? 'available' : 'sold out'}`, variables.available ? 'success' : 'warning');
       }
-      return updated;
-    });
-  }, [showToast]);
-
-  const addItem = useCallback((item: MenuItem) => {
-    setItems((prev) => [item, ...prev]);
-    if (!categories.includes(item.category)) {
-      setCategories(prev => [...prev, item.category]);
     }
-    showToast(`${item.name} added to menu`, 'success');
-    markStepComplete("menu_item");
-  }, [categories, showToast, markStepComplete]);
+  });
 
-  const updateItem = useCallback((updatedItem: MenuItem) => {
-    setItems((prev) => prev.map((i) => (i.id === updatedItem.id ? updatedItem : i)));
-    if (!categories.includes(updatedItem.category)) {
-      setCategories(prev => [...prev, updatedItem.category]);
+  const toggleAvailability = useCallback((id: string | number) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    mutationAvailability.mutate({ id, available: !item.available });
+  }, [items, mutationAvailability]);
+
+
+  const createItemMutation = useMutation({
+    mutationFn: async (itemData: any) => {
+      let categoryId = categoryIdMap[itemData.category];
+      
+      // If custom category, create it first
+      if (!categoryId) {
+        const catRes = await apiClient.post('/menu/categories', { 
+          name: itemData.category,
+          displayOrder: categoryData.length
+        });
+        categoryId = catRes.data.id;
+      }
+
+      // Create Item
+      const res = await apiClient.post('/menu/items', {
+        categoryId,
+        name: itemData.name,
+        description: itemData.description,
+        price: itemData.price,
+        prepTime: itemData.prepTime || 0,
+        popular: itemData.popular,
+        available: itemData.available,
+        image: itemData.imageFile ? undefined : itemData.image, // pass URL only if no file
+        variants: itemData.variants || [],
+        addOns: itemData.addOns || []
+      });
+
+      const newItem = res.data;
+
+      // Upload image if file provided
+      if (itemData.imageFile) {
+        const formData = new FormData();
+        formData.append('image', itemData.imageFile);
+        await apiClient.post(`/menu/items/${newItem.id}/image`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+
+      return newItem;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['menu'] });
+      showToast(`${data.name} added to menu`, 'success');
+      markStepComplete("menu_item");
+    },
+    onError: () => {
+      showToast(`Failed to add item`, 'error');
     }
-    showToast(`${updatedItem.name} updated`, 'success');
-  }, [categories, showToast]);
+  });
+
+  const updateItemMutation = useMutation({
+    mutationFn: async (itemData: any) => {
+      let categoryId = categoryIdMap[itemData.category];
+      if (!categoryId) {
+         const catRes = await apiClient.post('/menu/categories', { 
+           name: itemData.category,
+           displayOrder: categoryData.length
+         });
+         categoryId = catRes.data.id;
+      }
+
+      await apiClient.put(`/menu/items/${itemData.id}`, {
+        categoryId,
+        name: itemData.name,
+        description: itemData.description,
+        price: itemData.price,
+        prepTime: itemData.prepTime || 0,
+        popular: itemData.popular,
+        available: itemData.available,
+        image: itemData.imageFile ? undefined : itemData.image,
+        variants: itemData.variants || [],
+        addOns: itemData.addOns || []
+      });
+
+      if (itemData.imageFile) {
+        const formData = new FormData();
+        formData.append('image', itemData.imageFile);
+        await apiClient.post(`/menu/items/${itemData.id}/image`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['menu'] });
+      showToast(`${variables.name} updated`, 'success');
+    },
+    onError: () => {
+      showToast(`Failed to update item`, 'error');
+    }
+  });
+
+  const deleteItemMutation = useMutation({
+    mutationFn: async (id: string | number) => {
+      await apiClient.delete(`/menu/items/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['menu'] });
+      showToast(`Item deleted`, 'info');
+      setDeleteTarget(null);
+    }
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: (string | number)[]) => {
+      for (const id of ids) {
+         await apiClient.delete(`/menu/items/${id}`);
+      }
+    },
+    onSuccess: (_, variables) => {
+       queryClient.invalidateQueries({ queryKey: ['menu'] });
+       showToast(`${variables.length} items deleted`, 'info');
+       setSelectedIds(new Set());
+       setBulkDeleteCount(null);
+    }
+  });
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async (args: { ids: (string | number)[], available: boolean }) => {
+      for (const id of args.ids) {
+         await apiClient.patch(`/menu/items/${id}/availability`, { available: args.available });
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['menu'] });
+      showToast(`${variables.ids.length} items marked as ${variables.available ? 'available' : 'sold out'}`, variables.available ? 'success' : 'warning');
+      setSelectedIds(new Set());
+      setStatusTargetCount(null);
+    }
+  });
+
+  const addItem = useCallback((item: any) => {
+    createItemMutation.mutate(item);
+  }, [createItemMutation]);
+
+  const updateItem = useCallback((updatedItem: any) => {
+    updateItemMutation.mutate(updatedItem);
+  }, [updateItemMutation]);
 
   const deleteItem = useCallback((item: MenuItem) => {
-    setItems((prev) => prev.filter((i) => i.id !== item.id));
-    setDeleteTarget(null);
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(item.id);
-      return next;
-    });
-    showToast(`${item.name} deleted from menu`, 'info');
-  }, [showToast]);
+    deleteItemMutation.mutate(item.id);
+  }, [deleteItemMutation]);
 
   const bulkDelete = useCallback(() => {
-    setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)));
-    const count = selectedIds.size;
-    setSelectedIds(new Set());
-    setBulkDeleteCount(null);
-    showToast(`${count} items deleted`, 'info');
-  }, [selectedIds, showToast]);
+    bulkDeleteMutation.mutate(Array.from(selectedIds));
+  }, [selectedIds, bulkDeleteMutation]);
 
   const handleBulkStatusClick = () => {
-    // If all selected items are currently unavailable, then the action is to make them available.
-    // Otherwise, the action is to make them unavailable.
     const allUnavailable = Array.from(selectedIds).every(id => {
       const item = items.find(i => i.id === id);
       return item && !item.available;
@@ -327,16 +469,10 @@ export default function MenuManagement() {
   };
 
   const confirmBulkStatus = useCallback(() => {
-    setItems((prev) =>
-      prev.map((i) => (selectedIds.has(i.id) ? { ...i, available: isMakingAvailable } : i))
-    );
-    const count = selectedIds.size;
-    setSelectedIds(new Set());
-    setStatusTargetCount(null);
-    showToast(`${count} items marked as ${isMakingAvailable ? 'available' : 'sold out'}`, isMakingAvailable ? 'success' : 'warning');
-  }, [selectedIds, isMakingAvailable, showToast]);
+    bulkStatusMutation.mutate({ ids: Array.from(selectedIds), available: isMakingAvailable });
+  }, [selectedIds, isMakingAvailable, bulkStatusMutation]);
 
-  const toggleSelect = useCallback((id: number, selected: boolean) => {
+  const toggleSelect = useCallback((id: string | number, selected: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (selected) {
@@ -369,7 +505,6 @@ export default function MenuManagement() {
 
   const toggleSelectAll = useCallback(() => {
     const allIds = paginatedItems.map((i) => i.id);
-    // If all items ON CURRENT PAGE are selected, unselect them all. Otherwise select all on page.
     let allSelected = true;
     for (const id of allIds) {
       if (!selectedIds.has(id)) {
@@ -399,7 +534,6 @@ export default function MenuManagement() {
 
   const isAllSelected = paginatedItems.length > 0 && paginatedItems.every(i => selectedIds.has(i.id));
 
-  // Determine button text based on selection state
   const isAllSelectionUnavailable = selectedIds.size > 0 && Array.from(selectedIds).every(id => {
     const item = items.find(i => i.id === id);
     return item && !item.available;
@@ -407,7 +541,6 @@ export default function MenuManagement() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <PageHeader
@@ -547,7 +680,7 @@ export default function MenuManagement() {
       </div>
 
       {/* Items List */}
-      {isRefreshing ? (
+      {isRefreshing || isLoading ? (
         <div className="flex flex-col gap-6">
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[400px] content-start">
@@ -572,7 +705,7 @@ export default function MenuManagement() {
                   key={item.id}
                   item={item}
                   onToggle={toggleAvailability}
-                  onClick={setSelectedItemId}
+                  onClick={(id) => setSelectedItemId(id)}
                   isSelected={selectedIds.has(item.id)}
                   onSelect={toggleSelect}
                 />
@@ -585,7 +718,7 @@ export default function MenuManagement() {
                   key={item.id}
                   item={item}
                   onToggle={toggleAvailability}
-                  onClick={setSelectedItemId}
+                  onClick={(id) => setSelectedItemId(id)}
                   isSelected={selectedIds.has(item.id)}
                   onSelect={toggleSelect}
                 />

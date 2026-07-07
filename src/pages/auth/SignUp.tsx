@@ -154,12 +154,19 @@ export default function SignUp() {
       setIsLoading(true);
       setError(null);
       
-      // MOCK BACKEND: This simulates the combined Step 1 + Step 2 + Step 3 payload creating a Restaurant + User
-      await signUp(name, email, password, "owner");
+      await signUp({
+        name,
+        email,
+        password,
+        phone,
+        restaurantName,
+        address,
+        tablesCount: Number(tablesCount)
+      });
       
       navigate("/dashboard", { replace: true });
-    } catch {
-      setError("This email or phone number is already registered. Please sign in instead.");
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
     }

@@ -1,15 +1,27 @@
-import { liveOrdersSummary } from '@/mocks/dashboard';
 import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { apiClient } from '@/api/client';
 
 const statuses = [
-  { key: 'new', label: 'New', color: 'bg-primary-500', icon: 'ri-add-circle-line' },
-  { key: 'confirmed', label: 'Confirmed', color: 'bg-accent-500', icon: 'ri-check-double-line' },
-  { key: 'preparing', label: 'Preparing', color: 'bg-amber-500', icon: 'ri-fire-line' },
-  { key: 'ready', label: 'Ready', color: 'bg-secondary-500', icon: 'ri-check-line' },
-  { key: 'served', label: 'Served', color: 'bg-foreground-300', icon: 'ri-restaurant-line' },
+  { key: 'NEW', label: 'New', color: 'bg-primary-500', icon: 'ri-add-circle-line' },
+  { key: 'CONFIRMED', label: 'Confirmed', color: 'bg-accent-500', icon: 'ri-check-double-line' },
+  { key: 'PREPARING', label: 'Preparing', color: 'bg-amber-500', icon: 'ri-fire-line' },
+  { key: 'READY', label: 'Ready', color: 'bg-secondary-500', icon: 'ri-check-line' },
+  { key: 'SERVED', label: 'Served', color: 'bg-foreground-300', icon: 'ri-restaurant-line' },
 ];
 
 export default function LiveOrdersWidget() {
+  const [orders, setOrders] = useState<any[]>([]);
+
+  useEffect(() => {
+    apiClient.get('/orders').then(res => setOrders(res.data)).catch(() => {});
+  }, []);
+
+  const liveOrdersSummary = statuses.reduce((acc, s) => {
+    acc[s.key] = orders.filter(o => o.status === s.key).length;
+    return acc;
+  }, {} as Record<string, number>);
+
   const total = Object.values(liveOrdersSummary).reduce((sum, v) => sum + v, 0);
 
   return (

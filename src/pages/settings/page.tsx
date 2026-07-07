@@ -5,12 +5,78 @@ import PageSkeleton from '@/components/base/PageSkeleton';
 import CustomSelect from '@/components/base/CustomSelect';
 import { useRefresh } from '@/contexts/RefreshContext';
 import { useOnboarding } from '@/contexts/OnboardingContext';
-import { restaurantSettings, paymentProviders } from '@/mocks/settings';
 import SubscriptionBillingSection from './components/SubscriptionBillingSection';
+
+const DEFAULT_SETTINGS = {
+  profile: {
+    name: 'Platera Restaurant',
+    tagline: 'Authentic Ghanaian Cuisine in the Heart of Accra',
+    address: '15 Independence Avenue, Osu, Accra, Ghana',
+    phone: '+233 24 567 8900',
+    email: 'hello@platera.app',
+    website: 'www.platera.app',
+    openingHours: {
+      monday: { open: '10:00', close: '22:00' },
+      tuesday: { open: '10:00', close: '22:00' },
+      wednesday: { open: '10:00', close: '22:00' },
+      thursday: { open: '10:00', close: '23:00' },
+      friday: { open: '10:00', close: '00:00' },
+      saturday: { open: '09:00', close: '00:00' },
+      sunday: { open: '12:00', close: '21:00' },
+    },
+  },
+  paymentMethods: {
+    momoEnabled: true,
+    momoProvider: 'MTN Mobile Money',
+    momoNumber: '024 567 8900',
+    cashEnabled: true,
+  },
+  taxSettings: {
+    vatRate: 12.5,
+    nhilRate: 2.5,
+    getfundRate: 2.5,
+    covidRate: 1.0,
+    tourismRate: 1.0,
+    serviceCharge: 5,
+  },
+  notifications: {
+    newOrderSound: true,
+    newOrderNotify: true,
+    lowStockNotify: true,
+    lowStockThreshold: 5,
+    negativeFeedbackNotify: true,
+    dailyReportEmail: true,
+    dailyReportTime: '22:00',
+  },
+  appearance: {
+    primaryColor: '#FF6B35',
+    displayLanguage: 'English',
+    currency: 'GHS',
+    dateFormat: 'DD/MM/YYYY',
+    timeFormat: '24-hour',
+  },
+};
+
+const getSavedSettings = () => {
+  try {
+    const saved = localStorage.getItem('platera_settings');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    // Ignore error
+  }
+  return DEFAULT_SETTINGS;
+};
+
+const paymentProviders = [
+  { id: 'momo', name: 'Mobile Money', icon: 'ri-smartphone-line', description: 'MTN, Telecel, AT' },
+  { id: 'cash', name: 'Cash', icon: 'ri-money-dollar-circle-line', description: 'In-person cash payments' },
+];
 
 type SettingTab = 'profile' | 'payments' | 'tax' | 'notifications' | 'appearance' | 'subscription';
 
 export default function Settings() {
+  const [restaurantSettings, setRestaurantSettings] = useState(getSavedSettings);
+
   const { isRefreshing } = useRefresh();
   const { markStepComplete } = useOnboarding();
   const [activeTab, setActiveTab] = useState<SettingTab>('profile');
@@ -30,11 +96,15 @@ export default function Settings() {
   const [alertCategories, setAlertCategories] = useState<string[]>(['Proteins', 'Produce', 'Dry Goods']);
   const [testEmailSent, setTestEmailSent] = useState(false);
 
-  // Toggle states
   const [paymentToggles, setPaymentToggles] = useState<Record<string, boolean>>({
-    cash: true,
+    cash: restaurantSettings.paymentMethods.cashEnabled,
     momo: restaurantSettings.paymentMethods.momoEnabled,
   });
+
+  const [momoProviderState, setMomoProviderState] = useState(restaurantSettings.paymentMethods.momoProvider);
+  const [momoNumberState, setMomoNumberState] = useState(restaurantSettings.paymentMethods.momoNumber);
+
+  const [taxState, setTaxState] = useState(restaurantSettings.taxSettings);
 
   const [notificationToggles, setNotificationToggles] = useState<Record<string, boolean>>({
     newOrderSound: restaurantSettings.notifications.newOrderSound,
@@ -80,6 +150,19 @@ export default function Settings() {
 
     // Toggles diffs
     if (paymentToggles.momo !== restaurantSettings.paymentMethods.momoEnabled) diffs.push(`MoMo Payment ${paymentToggles.momo ? 'Enabled' : 'Disabled'}`);
+    if (paymentToggles.cash !== restaurantSettings.paymentMethods.cashEnabled) diffs.push(`Cash Payment ${paymentToggles.cash ? 'Enabled' : 'Disabled'}`);
+    
+    // Payment diffs
+    if (momoProviderState !== restaurantSettings.paymentMethods.momoProvider) diffs.push(`MoMo Provider changed to <b>${momoProviderState}</b>`);
+    if (momoNumberState !== restaurantSettings.paymentMethods.momoNumber) diffs.push(`MoMo Number changed to <b>${momoNumberState}</b>`);
+
+    // Tax diffs
+    if (taxState.vatRate !== restaurantSettings.taxSettings.vatRate) diffs.push(`VAT Rate changed to <b>${taxState.vatRate}%</b>`);
+    if (taxState.nhilRate !== restaurantSettings.taxSettings.nhilRate) diffs.push(`NHIL Rate changed to <b>${taxState.nhilRate}%</b>`);
+    if (taxState.getfundRate !== restaurantSettings.taxSettings.getfundRate) diffs.push(`GETFund Rate changed to <b>${taxState.getfundRate}%</b>`);
+    if (taxState.covidRate !== restaurantSettings.taxSettings.covidRate) diffs.push(`COVID-19 Levy changed to <b>${taxState.covidRate}%</b>`);
+    if (taxState.tourismRate !== restaurantSettings.taxSettings.tourismRate) diffs.push(`Tourism Levy changed to <b>${taxState.tourismRate}%</b>`);
+    if (taxState.serviceCharge !== restaurantSettings.taxSettings.serviceCharge) diffs.push(`Service Charge changed to <b>${taxState.serviceCharge}%</b>`);
 
     // Notification diffs
     Object.keys(notificationToggles).forEach((key) => {
@@ -123,9 +206,35 @@ export default function Settings() {
 
   const handleSave = () => {
     if (!hasChanges) return;
+    
+    // Save to localStorage
+    const newSettings = {
+      profile: profileState,
+      paymentMethods: {
+        momoEnabled: paymentToggles.momo ?? false,
+        momoProvider: momoProviderState,
+        momoNumber: momoNumberState,
+        cashEnabled: paymentToggles.cash ?? true,
+      },
+      taxSettings: taxState,
+      notifications: {
+        ...restaurantSettings.notifications,
+        ...notificationToggles,
+      },
+      appearance: {
+        primaryColor: primaryColorHex,
+        displayLanguage: 'English',
+        currency: currency,
+        dateFormat: dateFormat,
+        timeFormat: timeFormat,
+      }
+    };
+    
+    localStorage.setItem('platera_settings', JSON.stringify(newSettings));
+    setRestaurantSettings(newSettings);
+    
     setToast('Settings saved successfully!');
     setTimeout(() => setToast(''), 3000);
-    // Usually we would update server/context here, but for demo we just clear diff
     setUnsavedDiff([]);
     if (activeTab === 'profile') {
       markStepComplete('upload_logo');
@@ -201,11 +310,11 @@ export default function Settings() {
           {activeTab === 'profile' && (
             <div className="space-y-5">
               <div className="flex items-center gap-4 pb-5 border-b border-background-200 dark:border-foreground-800">
-                <div className="w-16 h-16 rounded-xl bg-primary-500 flex items-center justify-center overflow-hidden border border-background-200 dark:border-foreground-700">
+                <div className={`w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden border border-background-200 dark:border-foreground-700 ${logoImage ? '' : 'bg-background-100 dark:bg-foreground-800'}`}>
                   {logoImage ? (
                     <img src={logoImage} alt="Restaurant Logo" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-white text-xl font-bold font-heading">P</span>
+                    <i className="ri-store-2-line text-2xl text-foreground-400" />
                   )}
                 </div>
                 <div>
@@ -341,8 +450,8 @@ export default function Settings() {
                     <div>
                       <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">MoMo Provider</label>
                       <CustomSelect
-                        value={restaurantSettings.paymentMethods.momoProvider}
-                        onChange={() => { }}
+                        value={momoProviderState}
+                        onChange={(val) => setMomoProviderState(val)}
                         options={[
                           { value: 'MTN Mobile Money', label: 'MTN Mobile Money' },
                           { value: 'Telecel Cash', label: 'Telecel Cash' },
@@ -352,7 +461,12 @@ export default function Settings() {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">MoMo Number</label>
-                      <input type="text" defaultValue={restaurantSettings.paymentMethods.momoNumber} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
+                      <input 
+                        type="text" 
+                        value={momoNumberState} 
+                        onChange={(e) => setMomoNumberState(e.target.value)}
+                        className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" 
+                      />
                     </div>
                   </div>
                 </div>
@@ -380,7 +494,7 @@ export default function Settings() {
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-foreground-900 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-center">Value Added Tax applied to goods and services.</div>
                     </div>
                   </div>
-                  <input type="number" step="0.5" defaultValue={restaurantSettings.taxSettings.vatRate} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
+                  <input type="number" step="0.5" value={taxState.vatRate} onChange={(e) => setTaxState({ ...taxState, vatRate: Number(e.target.value) })} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-1.5">
@@ -390,7 +504,7 @@ export default function Settings() {
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-foreground-900 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-center">National Health Insurance Levy.</div>
                     </div>
                   </div>
-                  <input type="number" step="0.5" defaultValue={restaurantSettings.taxSettings.nhilRate} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
+                  <input type="number" step="0.5" value={taxState.nhilRate} onChange={(e) => setTaxState({ ...taxState, nhilRate: Number(e.target.value) })} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-1.5">
@@ -400,7 +514,7 @@ export default function Settings() {
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-foreground-900 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-center">Ghana Education Trust Fund Levy.</div>
                     </div>
                   </div>
-                  <input type="number" step="0.5" defaultValue={restaurantSettings.taxSettings.getfundRate} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
+                  <input type="number" step="0.5" value={taxState.getfundRate} onChange={(e) => setTaxState({ ...taxState, getfundRate: Number(e.target.value) })} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-1.5">
@@ -410,7 +524,7 @@ export default function Settings() {
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-foreground-900 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-center">COVID-19 Health Recovery Levy.</div>
                     </div>
                   </div>
-                  <input type="number" step="0.5" defaultValue={1.0} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
+                  <input type="number" step="0.5" value={taxState.covidRate} onChange={(e) => setTaxState({ ...taxState, covidRate: Number(e.target.value) })} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-1.5">
@@ -420,7 +534,7 @@ export default function Settings() {
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-foreground-900 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-center">Required for licensed hospitality & catering establishments.</div>
                     </div>
                   </div>
-                  <input type="number" step="0.5" defaultValue={1.0} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
+                  <input type="number" step="0.5" value={taxState.tourismRate} onChange={(e) => setTaxState({ ...taxState, tourismRate: Number(e.target.value) })} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-1.5">
@@ -430,12 +544,12 @@ export default function Settings() {
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-foreground-900 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-center">Gratuity or standard service fee applied to all bills.</div>
                     </div>
                   </div>
-                  <input type="number" step="0.5" defaultValue={restaurantSettings.taxSettings.serviceCharge} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
+                  <input type="number" step="0.5" value={taxState.serviceCharge} onChange={(e) => setTaxState({ ...taxState, serviceCharge: Number(e.target.value) })} className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
                 </div>
               </div>
               <div className="p-4 rounded-xl bg-background-50 dark:bg-foreground-800/30 border border-background-200 dark:border-foreground-800">
                 <p className="text-xs text-foreground-500 font-body">
-                  Total tax rate: <strong className="text-foreground-800 dark:text-foreground-200">{restaurantSettings.taxSettings.vatRate + restaurantSettings.taxSettings.nhilRate + restaurantSettings.taxSettings.getfundRate + 1.0 + 1.0}%</strong> + Service Charge: <strong className="text-foreground-800 dark:text-foreground-200">{restaurantSettings.taxSettings.serviceCharge}%</strong>
+                  Total tax rate: <strong className="text-foreground-800 dark:text-foreground-200">{(taxState.vatRate + taxState.nhilRate + taxState.getfundRate + taxState.covidRate + taxState.tourismRate).toFixed(1)}%</strong> + Service Charge: <strong className="text-foreground-800 dark:text-foreground-200">{taxState.serviceCharge}%</strong>
                 </p>
               </div>
               <button

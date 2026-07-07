@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUnsavedChanges } from '@/contexts/UnsavedChangesContext';
 import PageHeader from '@/components/base/PageHeader';
 import PageSkeleton from '@/components/base/PageSkeleton';
@@ -7,8 +8,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRefresh } from '@/contexts/RefreshContext';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useOnboarding } from '@/contexts/OnboardingContext';
-import { tables as initialTables, generateTableToken } from '@/mocks/tablets';
-import type { Table } from '@/mocks/tablets';
+import { apiClient } from '@/api/client';
+
+export interface Table {
+  id: string;
+  tableNumber: number;
+  capacity: number;
+  qrCodeUrl: string | null;
+  activeToken: string | null;
+}
 
 function TableTile({
   table,
@@ -26,10 +34,10 @@ function TableTile({
         <i className="ri-restaurant-line text-secondary-500 text-lg"></i>
       </div>
       <span className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading">
-        Table {table.number}
+        Table {table.tableNumber}
       </span>
       <span className="text-xs font-medium text-foreground-500 font-body">
-        {table.seats} seats
+        {table.capacity} seats
       </span>
     </button>
   );
@@ -39,11 +47,60 @@ export default function Tables() {
   const { user } = useAuth();
   const { isRefreshing } = useRefresh();
   const { markStepComplete } = useOnboarding();
-  const isStaff = user?.role === 'staff';
+  const isStaff = user?.role === 'STAFF';
+  const queryClient = useQueryClient();
 
-  const [tables, setTables] = useState<Table[]>(initialTables);
+  const { data: tables = [], isLoading, isError } = useQuery<Table[]>({
+    queryKey: ['tables'],
+    queryFn: async () => {
+      const res = await apiClient.get('/tables');
+      return res.data;
+    }
+  });
+
+  const createTableMutation = useMutation({
+    mutationFn: async (data: { tableNumber: number, capacity: number }) => {
+      const res = await apiClient.post('/tables', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
+      setShowAddModal(false);
+    }
+  });
+
+  const deleteTableMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/tables/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
+      setSelectedTable(null);
+      setShowDeleteConfirm(false);
+    }
+  });
+
+  const regenerateTokenMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiClient.post(`/tables/${id}/regenerate-token`);
+      return res.data;
+    },
+    onSuccess: (updatedTable) => {
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
+      
+      // Update selected table with the newly active token
+      const activeToken = updatedTable.tokens?.find((t: any) => t.isActive)?.token;
+      setSelectedTable(prev => prev ? { 
+        ...prev, 
+        qrCodeUrl: updatedTable.qrCodeUrl, 
+        activeToken 
+      } : null);
+      
+      setShowRegenerateConfirm(false);
+    }
+  });
+
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-  const [editTableSeats, setEditTableSeats] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTableSeats, setNewTableSeats] = useState(4);
   const [newTableNum, setNewTableNum] = useState<number>(1);
@@ -52,7 +109,6 @@ export default function Tables() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  // Confirmation state for QR regeneration and deletion
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -68,81 +124,45 @@ export default function Tables() {
       if (newTableSeats !== 4 || newTableNum !== 1) {
         diffs.push(`New Table ${newTableNum} with ${newTableSeats} seats (unsaved)`);
       }
-    } else if (selectedTable && editTableSeats !== null) {
-      if (editTableSeats !== selectedTable.seats) {
-        diffs.push(`Table ${selectedTable.number} seats changed to <b>${editTableSeats}</b>`);
-      }
     }
     setUnsavedDiff(diffs);
-  }, [showAddModal, newTableSeats, newTableNum, selectedTable, editTableSeats, setUnsavedDiff]);
+  }, [showAddModal, newTableSeats, newTableNum, setUnsavedDiff]);
 
   const handleCloseAdd = () => checkUnsaved(() => { setUnsavedDiff([]); setShowAddModal(false); });
-  const handleCloseEdit = () => checkUnsaved(() => { setUnsavedDiff([]); setSelectedTable(null); setEditTableSeats(null); });
+  const handleCloseEdit = () => checkUnsaved(() => { setUnsavedDiff([]); setSelectedTable(null); });
 
   const addTable = () => {
-    if (tables.some(t => t.number === newTableNum)) {
+    if (tables.some(t => t.tableNumber === newTableNum)) {
       setAddError(`Table ${newTableNum} already exists.`);
       return;
     }
-    const token = generateTableToken();
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-    const newTable: Table = {
-      id: Date.now(),
-      number: newTableNum,
-      seats: newTableSeats,
-      token,
-      qrCodeUrl: `${baseUrl}/order/${token}`,
-      qrLink: `${baseUrl}/order/${token}`,
-    };
-    setTables((prev) => [...prev, newTable].sort((a, b) => a.number - b.number));
-    setUnsavedDiff([]);
-    setShowAddModal(false);
-  };
-
-  const saveTableEdit = () => {
-    if (selectedTable && editTableSeats !== null) {
-      setTables((prev) => prev.map(t => t.id === selectedTable.id ? { ...t, seats: editTableSeats } : t));
-      setSelectedTable(null);
-      setEditTableSeats(null);
-      setUnsavedDiff([]);
-    }
+    createTableMutation.mutate({ tableNumber: newTableNum, capacity: newTableSeats });
   };
 
   const deleteTable = () => {
     if (selectedTable) {
-      setTables((prev) => prev.filter(t => t.id !== selectedTable.id));
-      setSelectedTable(null);
-      setShowDeleteConfirm(false);
+      deleteTableMutation.mutate(selectedTable.id);
     }
   };
 
   const regenerateQR = () => {
     if (selectedTable) {
-      const newToken = generateTableToken();
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-      const newUrl = `${baseUrl}/order/${newToken}`;
-
-      setTables((prev) => prev.map((t) => {
-        if (t.id === selectedTable.id) {
-          const updatedTable = { ...t, token: newToken, qrCodeUrl: newUrl, qrLink: newUrl };
-          setSelectedTable(updatedTable);
-          return updatedTable;
-        }
-        return t;
-      }));
-      setShowRegenerateConfirm(false);
+      regenerateTokenMutation.mutate(selectedTable.id);
     }
   };
 
+  const baseUrl = useMemo(() => typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173', []);
+  const getQrLink = (table: Table) => table.activeToken ? `${baseUrl}/order/${table.activeToken}` : '';
+
   const copyLink = () => {
     if (selectedTable) {
-      navigator.clipboard.writeText(selectedTable.qrLink);
+      navigator.clipboard.writeText(getQrLink(selectedTable));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  if (isRefreshing) return <PageSkeleton />;
+  if (isRefreshing || isLoading) return <PageSkeleton />;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -153,7 +173,7 @@ export default function Tables() {
         {!isStaff && (
           <button
             onClick={() => {
-              setNewTableNum(tables.length > 0 ? Math.max(...tables.map((t) => t.number)) + 1 : 1);
+              setNewTableNum(tables.length > 0 ? Math.max(...tables.map((t) => t.tableNumber)) + 1 : 1);
               setNewTableSeats(4);
               setAddError('');
               setShowAddModal(true);
@@ -165,10 +185,16 @@ export default function Tables() {
         )}
       </PageHeader>
 
+      {isError && (
+        <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-600 font-medium">
+          Error loading tables. Please try again later.
+        </div>
+      )}
+
       {/* Table Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {tables.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((table) => (
-          <TableTile key={table.id} table={table} onClick={(t) => { setSelectedTable(t); setEditTableSeats(t.seats); }} />
+          <TableTile key={table.id} table={table} onClick={(t) => { setSelectedTable(t); }} />
         ))}
       </div>
 
@@ -224,7 +250,7 @@ export default function Tables() {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading">
-                    Table {selectedTable.number}
+                    Table {selectedTable.tableNumber}
                   </h2>
                   <span className="text-xs text-foreground-400 font-body">Manage Table</span>
                 </div>
@@ -242,15 +268,8 @@ export default function Tables() {
               <div>
                 <label className="block text-xs font-semibold text-foreground-700 dark:text-foreground-300 uppercase tracking-wider mb-2 font-body">Table Seats</label>
                 <div className="flex items-center justify-between bg-background-50 dark:bg-foreground-800/50 p-3 rounded-lg border border-background-200 dark:border-foreground-700">
-                  <button onClick={() => setEditTableSeats(Math.max(1, (editTableSeats || 1) - 1))} className="w-10 h-10 rounded-lg bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600 cursor-pointer shadow-sm"><i className="ri-subtract-line text-lg"></i></button>
-                  <span className="text-2xl font-bold text-foreground-900 dark:text-foreground-100 font-heading w-12 text-center">{editTableSeats}</span>
-                  <button onClick={() => setEditTableSeats(Math.min(20, (editTableSeats || 1) + 1))} className="w-10 h-10 rounded-lg bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600 cursor-pointer shadow-sm"><i className="ri-add-line text-lg"></i></button>
+                  <span className="text-2xl font-bold text-foreground-900 dark:text-foreground-100 font-heading w-12 text-center">{selectedTable.capacity}</span>
                 </div>
-                {editTableSeats !== selectedTable.seats && (
-                  <button onClick={saveTableEdit} className="w-full mt-3 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer">
-                    Save Seats
-                  </button>
-                )}
               </div>
 
               {/* QR Code Section */}
@@ -260,52 +279,59 @@ export default function Tables() {
                 </h3>
                 <div className="bg-background-50 dark:bg-foreground-800/50 rounded-lg border border-background-200 dark:border-foreground-700 p-5 flex flex-col items-center gap-4">
                   <div className="w-48 h-48 bg-white rounded-lg p-2 flex items-center justify-center shadow-sm">
-                    <QRCodeCanvas
-                      value={selectedTable.qrLink}
-                      size={176}
-                      bgColor="#FFFFFF"
-                      fgColor="#1A1B1F"
-                      level="M"
-                      includeMargin={false}
-                    />
+                    {selectedTable.activeToken ? (
+                      <QRCodeCanvas
+                        value={getQrLink(selectedTable)}
+                        size={176}
+                        bgColor="#FFFFFF"
+                        fgColor="#1A1B1F"
+                        level="M"
+                        includeMargin={false}
+                      />
+                    ) : (
+                      <span className="text-foreground-400 text-sm text-center">No active token</span>
+                    )}
                   </div>
 
                   <div className="w-full flex flex-col gap-2">
                     <div className="flex items-center gap-2 bg-white dark:bg-foreground-800 rounded-lg border border-background-200 dark:border-foreground-700 p-2">
                       <code className="text-xs text-foreground-600 dark:text-foreground-300 font-mono flex-1 truncate">
-                        {selectedTable.qrLink}
+                        {getQrLink(selectedTable) || 'N/A'}
                       </code>
-                      <button
-                        onClick={copyLink}
-                        className="px-3 py-1.5 rounded-md bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-300 hover:bg-secondary-200 dark:hover:bg-secondary-800 text-xs font-medium transition-all cursor-pointer whitespace-nowrap flex items-center gap-1"
-                      >
-                        <i className={copied ? 'ri-check-line' : 'ri-file-copy-line'}></i>
-                        {copied ? 'Copied' : 'Copy'}
-                      </button>
+                      {selectedTable.activeToken && (
+                        <button
+                          onClick={copyLink}
+                          className="px-3 py-1.5 rounded-md bg-secondary-100 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-300 hover:bg-secondary-200 dark:hover:bg-secondary-800 text-xs font-medium transition-all cursor-pointer whitespace-nowrap flex items-center gap-1"
+                        >
+                          <i className={copied ? 'ri-check-line' : 'ri-file-copy-line'}></i>
+                          {copied ? 'Copied' : 'Copy'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 pt-2">
-                <button className="w-full py-2.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer flex items-center justify-center gap-2">
-                  <i className="ri-download-line"></i> Download QR Code
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowRegenerateConfirm(true)}
-                    className="flex-1 py-2.5 rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 font-medium text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <i className="ri-refresh-line"></i> Regenerate Link
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    className="py-2.5 px-4 rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 font-medium text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <i className="ri-delete-bin-line"></i>
-                  </button>
+              {!isStaff && (
+                <div className="flex flex-col gap-2 pt-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowRegenerateConfirm(true)}
+                      className="flex-1 py-2.5 rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 font-medium text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                      disabled={regenerateTokenMutation.isPending}
+                    >
+                      <i className="ri-refresh-line"></i> {regenerateTokenMutation.isPending ? 'Regenerating...' : 'Regenerate Link'}
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="py-2.5 px-4 rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 font-medium text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                      disabled={deleteTableMutation.isPending}
+                    >
+                      <i className="ri-delete-bin-line"></i>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>,
@@ -315,7 +341,7 @@ export default function Tables() {
       {/* Regenerate Confirmation Modal */}
       {showRegenerateConfirm && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={() => setShowRegenerateConfirm(false)}></div>
+          <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={() => !regenerateTokenMutation.isPending && setShowRegenerateConfirm(false)}></div>
           <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-2xl w-full max-w-sm animate-scale-in p-6">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
@@ -326,21 +352,23 @@ export default function Tables() {
                   Regenerate QR Code?
                 </h3>
                 <p className="text-sm text-foreground-500 font-body">
-                  This will generate a new secure link for Table {selectedTable?.number}. The old QR code will no longer work and must be physically replaced on the table.
+                  This will generate a new secure link for Table {selectedTable?.tableNumber}. The old QR code will no longer work and must be physically replaced on the table.
                 </p>
               </div>
               <div className="flex w-full gap-3 mt-2">
                 <button
                   onClick={() => setShowRegenerateConfirm(false)}
-                  className="flex-1 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer"
+                  disabled={regenerateTokenMutation.isPending}
+                  className="flex-1 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={regenerateQR}
-                  className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-all cursor-pointer"
+                  disabled={regenerateTokenMutation.isPending}
+                  className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
                 >
-                  Regenerate
+                  {regenerateTokenMutation.isPending ? 'Working...' : 'Regenerate'}
                 </button>
               </div>
             </div>
@@ -352,7 +380,7 @@ export default function Tables() {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)}></div>
+          <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={() => !deleteTableMutation.isPending && setShowDeleteConfirm(false)}></div>
           <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-2xl w-full max-w-sm animate-scale-in p-6">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
@@ -360,7 +388,7 @@ export default function Tables() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-foreground-900 dark:text-foreground-100 font-heading mb-1">
-                  Delete Table {selectedTable?.number}?
+                  Delete Table {selectedTable?.tableNumber}?
                 </h3>
                 <p className="text-sm text-foreground-500 font-body">
                   This action cannot be undone. You can reuse this table number later if needed.
@@ -369,15 +397,17 @@ export default function Tables() {
               <div className="flex w-full gap-3 mt-2">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="flex-1 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer"
+                  disabled={deleteTableMutation.isPending}
+                  className="flex-1 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={deleteTable}
-                  className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-all cursor-pointer"
+                  disabled={deleteTableMutation.isPending}
+                  className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
                 >
-                  Delete Table
+                  {deleteTableMutation.isPending ? 'Working...' : 'Delete Table'}
                 </button>
               </div>
             </div>
@@ -402,6 +432,12 @@ export default function Tables() {
                 <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg text-sm text-red-600 dark:text-red-400 font-medium animate-fade-in flex items-center gap-2">
                   <i className="ri-error-warning-line text-lg"></i>
                   {addError}
+                </div>
+              )}
+              {createTableMutation.isError && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg text-sm text-red-600 dark:text-red-400 font-medium animate-fade-in flex items-center gap-2">
+                  <i className="ri-error-warning-line text-lg"></i>
+                  {(createTableMutation.error as any).response?.data?.error || 'Failed to create table'}
                 </div>
               )}
 
@@ -443,15 +479,17 @@ export default function Tables() {
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={handleCloseAdd}
-                  className="flex-1 py-3 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer"
+                  disabled={createTableMutation.isPending}
+                  className="flex-1 py-3 rounded-lg border border-background-200 dark:border-foreground-700 text-foreground-600 dark:text-foreground-300 font-medium text-sm hover:bg-background-50 dark:hover:bg-foreground-800 transition-all cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={addTable}
-                  className="flex-1 py-3 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer shadow-md shadow-primary-500/20"
+                  disabled={createTableMutation.isPending}
+                  className="flex-1 py-3 rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-semibold text-sm transition-all cursor-pointer shadow-md shadow-primary-500/20 disabled:opacity-50 flex items-center justify-center"
                 >
-                  Confirm
+                  {createTableMutation.isPending ? 'Creating...' : 'Confirm'}
                 </button>
               </div>
             </div>

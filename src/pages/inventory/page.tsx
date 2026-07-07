@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useUnsavedChanges } from '@/contexts/UnsavedChangesContext';
 import PageHeader from '@/components/base/PageHeader';
@@ -21,16 +21,14 @@ interface InventoryItem {
 export default function Inventory() {
   const { user } = useAuth();
   const { isRefreshing } = useRefresh();
-  const isStaff = user?.role === 'staff';
+  const isStaff = user?.role === 'STAFF';
 
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All Categories');
-  const inventoryCategories = ['All Categories', 'Proteins', 'Produce', 'Dairy', 'Dry Goods', 'Beverages', 'Packaging'];
+  const [supplierFilter, setSupplierFilter] = useState('All Suppliers');
   const [showRestock, setShowRestock] = useState<string | null>(null);
   const [restockAmount, setRestockAmount] = useState('');
   const [showSell, setShowSell] = useState<string | null>(null);
   const [sellAmount, setSellAmount] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [salesLog, setSalesLog] = useState<any[]>([]);
   const [toast, setToast] = useState('');
@@ -104,8 +102,14 @@ export default function Inventory() {
     });
   };
 
+  const supplierOptions = [
+    'All Suppliers',
+    ...Array.from(new Set(items.map((item) => item.supplier).filter((supplier): supplier is string => Boolean(supplier)))),
+  ];
   const filtered = items.filter((item) => {
-    return item.name.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
+    const matchesSupplier = supplierFilter === 'All Suppliers' || item.supplier === supplierFilter;
+    return matchesSearch && matchesSupplier;
   });
 
   const openAddModal = () => {
@@ -163,11 +167,17 @@ export default function Inventory() {
   };
 
   const deleteItem = async (id: string) => {
-    // Note: Backend might not support deletion of inventory items yet
-    // If not supported, we'd need to add a status=INACTIVE field.
-    setToast('Item deleted locally (API delete not implemented)');
-    setToastType('warning');
-    setTimeout(() => setToast(''), 3000);
+    try {
+      await apiClient.delete(`/inventory/${id}`);
+      await fetchInventory();
+      setToast('Item deleted successfully');
+      setToastType('success');
+      setTimeout(() => setToast(''), 3000);
+    } catch (err: any) {
+      setToast(err.response?.data?.error || 'Failed to delete item');
+      setToastType('warning');
+      setTimeout(() => setToast(''), 3000);
+    }
   };
 
   const handleRestock = async (id: string) => {
@@ -295,9 +305,9 @@ export default function Inventory() {
         </div>
         <div className="w-full sm:w-48">
           <CustomSelect
-            value={categoryFilter}
-            onChange={(val) => setCategoryFilter(val)}
-            options={inventoryCategories.map(cat => ({ label: cat, value: cat }))}
+            value={supplierFilter}
+            onChange={(val) => setSupplierFilter(val)}
+            options={supplierOptions.map(supplier => ({ label: supplier, value: supplier }))}
           />
         </div>
       </div>

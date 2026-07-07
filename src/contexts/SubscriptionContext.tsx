@@ -10,8 +10,6 @@ import { apiClient } from '@/api/client';
 import {
   type SubscriptionState,
   type SubscriptionStatus,
-  addMonths,
-  addDays,
 } from '@/utils/subscription';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -44,9 +42,9 @@ function mapStatus(backendStatus: string): SubscriptionStatus {
 const PLAN_PRICE = 250;
 const PLAN_NAME = 'Platera Pro';
 
-const DEFAULT_SUBSCRIPTION: SubscriptionState = {
-  status: 'trial',
-  trialEndsAt: addDays(new Date(), 14),
+const EMPTY_SUBSCRIPTION: SubscriptionState = {
+  status: 'active',
+  trialEndsAt: new Date(),
   currentPeriodEndsAt: null,
   gracePeriodEndsAt: null,
   planPrice: PLAN_PRICE,
@@ -54,7 +52,7 @@ const DEFAULT_SUBSCRIPTION: SubscriptionState = {
 };
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, restaurant } = useAuth();
   const queryClient = useQueryClient();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [renewalSuccess, setRenewalSuccess] = useState(false);
@@ -72,22 +70,23 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   });
 
   // Build subscription state from API data
-  const subscription: SubscriptionState = apiSubscription
+  const subscriptionSource = apiSubscription ?? restaurant;
+  const subscription: SubscriptionState = subscriptionSource
     ? {
-        status: mapStatus(apiSubscription.subscriptionStatus),
-        trialEndsAt: apiSubscription.trialEndsAt
-          ? new Date(apiSubscription.trialEndsAt)
-          : addDays(new Date(), 14),
-        currentPeriodEndsAt: apiSubscription.currentPeriodEndsAt
-          ? new Date(apiSubscription.currentPeriodEndsAt)
+        status: mapStatus(subscriptionSource.subscriptionStatus),
+        trialEndsAt: subscriptionSource.trialEndsAt
+          ? new Date(subscriptionSource.trialEndsAt)
+          : new Date(),
+        currentPeriodEndsAt: subscriptionSource.currentPeriodEndsAt
+          ? new Date(subscriptionSource.currentPeriodEndsAt)
           : null,
-        gracePeriodEndsAt: apiSubscription.gracePeriodEndsAt
-          ? new Date(apiSubscription.gracePeriodEndsAt)
+        gracePeriodEndsAt: subscriptionSource.gracePeriodEndsAt
+          ? new Date(subscriptionSource.gracePeriodEndsAt)
           : null,
         planPrice: PLAN_PRICE,
         planName: PLAN_NAME,
       }
-    : DEFAULT_SUBSCRIPTION;
+    : EMPTY_SUBSCRIPTION;
 
   const openPaymentModal = useCallback(() => setShowPaymentModal(true), []);
   const closePaymentModal = useCallback(() => setShowPaymentModal(false), []);

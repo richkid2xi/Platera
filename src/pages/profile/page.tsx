@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import PageSkeleton from '@/components/base/PageSkeleton';
 import { useRefresh } from '@/contexts/RefreshContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { apiClient } from '@/api/client';
 
 export default function MyProfile() {
   const { isRefreshing } = useRefresh();
@@ -12,55 +14,50 @@ export default function MyProfile() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [toast, setToast] = useState('');
 
+  const { data: activityLog = [], isLoading: isActivityLoading } = useQuery<any[]>({
+    queryKey: ['profile-activity'],
+    queryFn: async () => {
+      const res = await apiClient.get('/audit-logs');
+      return res.data.slice(0, 5);
+    },
+    enabled: user?.role === 'OWNER',
+    retry: false,
+  });
+
   const profileData = {
     name: user?.name ?? 'Unknown User',
     email: user?.email ?? '',
-    role: user?.staffRole ?? user?.role ?? 'Staff',
-    phone: '+233 24 123 4567',
-    joinedDate: '2026-01-15',
-    lastLogin: '2026-07-03T08:30:00',
+    role: user?.role ?? 'STAFF',
     avatar: (user?.name ?? 'U').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
   };
 
-  const activityLog = [
-    { action: 'Login from new device', detail: 'Chrome on Windows · Accra, Ghana', date: 'Jul 3, 2026 at 08:30', icon: 'ri-login-box-line', color: 'text-secondary-500 bg-secondary-50 dark:bg-secondary-900/20' },
-    { action: 'Updated staff permissions', detail: 'Changed Abigail Adjei role permissions', date: 'Jul 2, 2026 at 15:45', icon: 'ri-shield-line', color: 'text-accent-500 bg-accent-50 dark:bg-accent-900/20' },
-    { action: 'Added new menu item', detail: 'Created "Grilled Lobster Special"', date: 'Jul 2, 2026 at 11:20', icon: 'ri-restaurant-2-line', color: 'text-primary-500 bg-primary-50 dark:bg-primary-900/20' },
-    { action: 'Exported sales report', detail: 'June 2026 monthly report', date: 'Jul 1, 2026 at 16:00', icon: 'ri-download-2-line', color: 'text-foreground-500 bg-background-100 dark:bg-foreground-800' },
-    { action: 'Changed restaurant hours', detail: 'Updated Sunday closing time to 21:00', date: 'Jun 30, 2026 at 09:15', icon: 'ri-time-line', color: 'text-foreground-500 bg-background-100 dark:bg-foreground-800' },
-  ];
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(''), 3000);
+  };
 
   const handleChangePassword = () => {
     if (!oldPassword || !newPassword || !confirmPassword) {
-      setToast('Please fill in all password fields');
-      setTimeout(() => setToast(''), 3000);
+      showToast('Please fill in all password fields');
       return;
     }
     if (newPassword !== confirmPassword) {
-      setToast('New passwords do not match');
-      setTimeout(() => setToast(''), 3000);
+      showToast('New passwords do not match');
       return;
     }
     if (newPassword.length < 8) {
-      setToast('Password must be at least 8 characters');
-      setTimeout(() => setToast(''), 3000);
+      showToast('Password must be at least 8 characters');
       return;
     }
-    setToast('Password changed successfully!');
-    setTimeout(() => setToast(''), 3000);
+    showToast('Password change API is not available yet');
     setShowPasswordModal(false);
     setOldPassword('');
     setNewPassword('');
     setConfirmPassword('');
   };
 
-  const handleSaveProfile = () => {
-    setToast('Profile updated successfully!');
-    setTimeout(() => setToast(''), 3000);
-  };
-
-  const formatDateTime = (d: string) => {
-    const date = new Date(d);
+  const formatDateTime = (value: string) => {
+    const date = new Date(value);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -79,7 +76,6 @@ export default function MyProfile() {
         <p className="text-sm text-foreground-500 dark:text-foreground-400 mt-1 font-body">Manage your personal account settings and security</p>
       </div>
 
-      {/* Profile Card */}
       <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-6 mb-6">
         <div className="flex flex-col sm:flex-row items-start gap-5 mb-6 pb-6 border-b border-background-200 dark:border-foreground-800">
           <div className="w-20 h-20 rounded-2xl bg-primary-500 flex items-center justify-center flex-shrink-0">
@@ -93,7 +89,6 @@ export default function MyProfile() {
                 <i className="ri-vip-crown-line text-xs"></i>
                 {profileData.role}
               </span>
-              <span className="text-xs text-foreground-400 font-body">Joined {formatDateTime(profileData.joinedDate).split(' at')[0]}</span>
             </div>
           </div>
           <button
@@ -107,79 +102,47 @@ export default function MyProfile() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Full Name</label>
-            <input
-              type="text"
-              defaultValue={profileData.name}
-              className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
-            />
+            <input type="text" value={profileData.name} readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-600 dark:text-foreground-400 font-body cursor-not-allowed" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Email Address</label>
-            <input
-              type="email"
-              defaultValue={profileData.email}
-              className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Phone Number</label>
-            <input
-              type="text"
-              defaultValue={profileData.phone}
-              className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
-            />
+            <input type="email" value={profileData.email} readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-600 dark:text-foreground-400 font-body cursor-not-allowed" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Role</label>
-            <input
-              type="text"
-              defaultValue={profileData.role}
-              readOnly
-              className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-600 dark:text-foreground-400 font-body cursor-not-allowed"
-            />
+            <input type="text" value={profileData.role} readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-600 dark:text-foreground-400 font-body cursor-not-allowed" />
           </div>
-        </div>
-
-        <button onClick={handleSaveProfile} className="mt-5 px-5 py-2.5 text-sm font-semibold rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-all cursor-pointer whitespace-nowrap font-body">
-          <i className="ri-save-line mr-1.5"></i>Save Changes
-        </button>
-      </div>
-
-      {/* Session Info */}
-      <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5 mb-6">
-        <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-3">Session Information</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="p-3 rounded-lg bg-background-50 dark:bg-foreground-800/30">
-            <p className="text-xs text-foreground-400 font-body">Last Login</p>
-            <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body mt-0.5">{formatDateTime(profileData.lastLogin)}</p>
-          </div>
-          <div className="p-3 rounded-lg bg-background-50 dark:bg-foreground-800/30">
-            <p className="text-xs text-foreground-400 font-body">Current Session</p>
-            <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body mt-0.5">Chrome on Windows · Accra, Ghana</p>
+          <div>
+            <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Session</label>
+            <input type="text" value="Active" readOnly className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-background-50 dark:bg-foreground-800/50 text-foreground-600 dark:text-foreground-400 font-body cursor-not-allowed" />
           </div>
         </div>
       </div>
 
-      {/* Activity Log */}
       <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
         <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-4">Recent Activity</h3>
         <div className="space-y-3">
-          {activityLog.map((activity, i) => (
-            <div key={i} className="flex items-start gap-3 py-2.5 border-b border-background-100 dark:border-foreground-800 last:border-b-0">
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${activity.color}`}>
-                <i className={`${activity.icon} text-sm`}></i>
+          {isActivityLoading ? (
+            <p className="text-sm text-foreground-400 font-body">Loading activity...</p>
+          ) : activityLog.length === 0 ? (
+            <p className="text-sm text-foreground-400 font-body">
+              {user?.role === 'OWNER' ? 'No recent activity recorded yet.' : 'Recent activity is available to owners.'}
+            </p>
+          ) : activityLog.map((activity) => (
+            <div key={activity.id} className="flex items-start gap-3 py-2.5 border-b border-background-100 dark:border-foreground-800 last:border-b-0">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-primary-500 bg-primary-50 dark:bg-primary-900/20">
+                <i className="ri-history-line text-sm"></i>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">{activity.action}</p>
-                <p className="text-xs text-foreground-400 font-body">{activity.detail}</p>
+                <p className="text-xs text-foreground-400 font-body">{activity.entityType}</p>
               </div>
-              <span className="text-xs text-foreground-400 font-body whitespace-nowrap">{activity.date}</span>
+              <span className="text-xs text-foreground-400 font-body whitespace-nowrap">{formatDateTime(activity.createdAt)}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Change Password Modal */}
       {showPasswordModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 modal-backdrop" onClick={() => setShowPasswordModal(false)}></div>

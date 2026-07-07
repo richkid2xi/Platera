@@ -21,6 +21,10 @@ export interface Restaurant {
   id: string;
   name: string;
   subscriptionStatus: string;
+  trialEndsAt?: string | null;
+  currentPeriodEndsAt?: string | null;
+  gracePeriodEndsAt?: string | null;
+  logoUrl?: string | null;
 }
 
 interface AuthContextType {
@@ -86,7 +90,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (payload: any) => {
     setIsSettingUp(true);
     try {
-      const res = await apiClient.post("/auth/register", payload);
+      const res = await apiClient.post("/auth/register", {
+        restaurantName: payload.restaurantName,
+        address: payload.restaurantAddress,
+        contactPhone: payload.phone,
+        contactEmail: payload.email,
+        userName: payload.name,
+        userEmail: payload.email,
+        userPhone: payload.phone,
+        password: payload.password,
+        numberOfTables: payload.tablesCount,
+      });
       setUser(res.data.user);
       setRestaurant(res.data.restaurant);
     } finally {

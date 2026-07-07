@@ -45,7 +45,7 @@ type OrderAction =
   | { type: 'UPDATE_INSTRUCTIONS'; payload: { menuItemId: string; instructions: string } }
   | { type: 'CLEAR_CART' }
   | { type: 'SET_PAYMENT_METHOD'; payload: PaymentMethod }
-  | { type: 'PLACE_ORDER'; payload: { total: number; orderId?: string } }
+  | { type: 'PLACE_ORDER'; payload: { total: number; orderId: string } }
   | { type: 'UPDATE_ORDER_STATUS'; payload: OrderStatus }
   | { type: 'SUBMIT_FEEDBACK' }
   | { type: 'RESET_ORDER_KEEP_TABLE' };
@@ -113,7 +113,7 @@ function orderReducer(state: OrderState, action: OrderAction): OrderState {
       return {
         ...state,
         currentOrder: {
-          id: action.payload.orderId || `ORD-${Math.floor(Math.random() * 90000) + 10000}`,
+          id: action.payload.orderId,
           items: [...state.cart],
           total: action.payload.total,
           status: 'NEW' as OrderStatus,

@@ -10,7 +10,11 @@ export let options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:5000/api/v1';
-const TOKEN = __ENV.TOKEN || 'dummy_token';
+const TOKEN = __ENV.TOKEN;
+
+if (!TOKEN) {
+  throw new Error('TOKEN is required. Run with: k6 run -e TOKEN=<active-table-token> loadtests/load.js');
+}
 
 export default function () {
   // Test reading menu (high traffic public read)

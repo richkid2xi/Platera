@@ -6,7 +6,8 @@ import {
   logInventory, 
   getInventoryLogs,
   getAllInventoryLogs,
-  linkInventoryToMenu
+  linkInventoryToMenu,
+  deleteInventoryItem
 } from '../controllers/inventoryController';
 import { authenticate } from '../middleware/authMiddleware';
 import { authorize } from '../middleware/roleMiddleware';
@@ -22,6 +23,7 @@ router.get('/', getInventory);
 router.get('/logs', authorize(Role.OWNER, Role.MANAGER, Role.STAFF), getAllInventoryLogs);
 router.post('/', authorize(Role.OWNER, Role.MANAGER), createInventoryItem);
 router.put('/:id', authorize(Role.OWNER, Role.MANAGER), updateInventoryItem);
+router.delete('/:id', authorize(Role.OWNER, Role.MANAGER), deleteInventoryItem);
 
 // Inventory Logs
 router.post('/:id/log', logInventory); // Authorization logic split inside the controller

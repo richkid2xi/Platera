@@ -71,10 +71,39 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       return { restaurant, user };
     });
 
+    const token = signToken({
+      id: result.user.id,
+      restaurantId: result.user.restaurantId,
+      role: result.user.role,
+    });
+
+    res.cookie('platera_auth_session', token, {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     res.status(201).json({
       message: 'Registration successful',
       restaurantId: result.restaurant.id,
       userId: result.user.id,
+      user: {
+        id: result.user.id,
+        name: result.user.name,
+        email: result.user.email,
+        role: result.user.role,
+        restaurantId: result.user.restaurantId,
+      },
+      restaurant: {
+        id: result.restaurant.id,
+        name: result.restaurant.name,
+        subscriptionStatus: result.restaurant.subscriptionStatus,
+        trialEndsAt: result.restaurant.trialEndsAt,
+        currentPeriodEndsAt: result.restaurant.currentPeriodEndsAt,
+        gracePeriodEndsAt: result.restaurant.gracePeriodEndsAt,
+        logoUrl: result.restaurant.logoUrl,
+      },
     });
   } catch (error) {
     next(error);
@@ -141,7 +170,16 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         email: user.email,
         role: user.role,
         restaurantId: user.restaurantId,
-      }
+      },
+      restaurant: {
+        id: user.restaurant.id,
+        name: user.restaurant.name,
+        subscriptionStatus: user.restaurant.subscriptionStatus,
+        trialEndsAt: user.restaurant.trialEndsAt,
+        currentPeriodEndsAt: user.restaurant.currentPeriodEndsAt,
+        gracePeriodEndsAt: user.restaurant.gracePeriodEndsAt,
+        logoUrl: user.restaurant.logoUrl,
+      },
     });
   } catch (error) {
     next(error);
@@ -167,8 +205,12 @@ export const me = async (req: Request, res: Response, next: NextFunction): Promi
         restaurantId: true,
         restaurant: {
           select: {
+            id: true,
             name: true,
             subscriptionStatus: true,
+            trialEndsAt: true,
+            currentPeriodEndsAt: true,
+            gracePeriodEndsAt: true,
             logoUrl: true,
           }
         }
@@ -180,7 +222,8 @@ export const me = async (req: Request, res: Response, next: NextFunction): Promi
       return;
     }
 
-    res.json({ user });
+    const { restaurant, ...authUser } = user;
+    res.json({ user: authUser, restaurant });
   } catch (error) {
     next(error);
   }

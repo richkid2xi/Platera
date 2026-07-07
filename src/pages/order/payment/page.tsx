@@ -49,6 +49,7 @@ export default function Payment() {
   const [countdown, setCountdown] = useState(5);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState('');
 
   const isDetailsValid = useCallback(() => {
     if (payMethod === 'momo') {
@@ -147,6 +148,7 @@ export default function Payment() {
   const handleConfirmPayment = async () => {
     setStep('processing');
     setProcessingIndex(0);
+    setPaymentError('');
 
     try {
       const orderPayload = {
@@ -163,8 +165,8 @@ export default function Payment() {
       setOrderId(response.data.id);
     } catch (error) {
       console.error('Failed to create order', error);
-      // fallback
-      setOrderId('fallback-' + Date.now());
+      setPaymentError('We could not create your order. Please try again.');
+      setStep('confirm');
     }
   };
 
@@ -630,6 +632,9 @@ export default function Payment() {
               <i className="ri-lock-line"></i>
               <span>Pay ₵{total}</span>
             </button>
+            {paymentError && (
+              <p className="text-red-500 font-body text-xs mt-3 text-center">{paymentError}</p>
+            )}
           </div>
         )}
 
@@ -708,11 +713,10 @@ export default function Payment() {
                 Your payment of ₵{total} has been processed. Your order is now being sent to the kitchen.
               </p>
 
-              {/* Order number mock */}
               <div className="bg-white/20 backdrop-blur-md rounded-2xl p-4 mb-10 inline-block mx-auto animate-fade-in-up animation-delay-300">
                 <p className="font-body text-xs text-white/80 mb-1">Order Number</p>
                 <p className="font-heading font-extrabold text-2xl text-white tracking-widest">
-                  #PL{String(Math.floor(Math.random() * 9000) + 1000)}
+                  #{orderId?.slice(0, 8).toUpperCase()}
                 </p>
               </div>
 

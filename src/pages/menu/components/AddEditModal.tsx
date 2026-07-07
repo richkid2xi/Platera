@@ -11,8 +11,6 @@ interface AddEditModalProps {
   categories: string[];
 }
 
-const DEFAULT_IMAGE_URL = 'https://readdy.ai/api/search-image?query=Beautifully%20plated%20modern%20African%20dish%20on%20a%20white%20ceramic%20plate%20with%20elegant%20garnish%2C%20warm%20studio%20lighting%2C%20clean%20minimal%20composition%2C%20professional%20food%20photography%20style%2C%20top-down%20angle%2C%20high%20detail%2C%20vibrant%20colors&width=600&height=400&seq=platera-menu-default&orientation=landscape';
-
 export default function AddEditModal({ isOpen, onClose, onSave, editItem, categories }: AddEditModalProps) {
   const isEdit = !!editItem;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,12 +70,12 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
     if (editItem) {
       setForm({
         name: editItem.name,
-        description: editItem.description,
+        description: editItem.description ?? '',
         price: String(editItem.price),
         category: categories.includes(editItem.category) ? editItem.category : 'custom',
-        imageUrl: editItem.image,
+        imageUrl: editItem.image ?? '',
         imageFile: null,
-        popular: editItem.popular,
+        popular: editItem.popular ?? false,
         requiresPrep: editItem.requiresPrep ?? true,
         prepTime: editItem.prepTime ?? 15,
       });
@@ -88,9 +86,12 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
         setIsCustomCategory(false);
         setCustomCategoryName('');
       }
-      setVariants(editItem.variants || []);
+      setVariants((editItem.variants || []).map((variant) => ({
+        name: variant.name,
+        price: 'price' in variant ? Number(variant.price) : Number(variant.priceModifier),
+      })));
       setAddOns(editItem.addOns || []);
-      setImagePreview(editItem.image);
+      setImagePreview(editItem.image ?? '');
       setImageError(false);
     } else {
       setForm({ name: '', description: '', price: '', category: categories[0] || 'Mains', imageUrl: '', imageFile: null, popular: false, requiresPrep: true, prepTime: 15 });
@@ -168,7 +169,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
     if (!finalCategory) return; // Prevent empty category
 
     const basePrice = Number(form.price);
-    const finalImage = form.imageUrl || DEFAULT_IMAGE_URL;
+    const finalImage = form.imageUrl.trim();
 
     onSave({
       id: editItem ? editItem.id : Date.now(),
@@ -176,7 +177,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
       description: form.description,
       price: basePrice,
       category: finalCategory,
-      image: finalImage,
+      image: finalImage || undefined,
       imageFile: form.imageFile,
       available: editItem ? editItem.available : true,
       popular: form.popular,

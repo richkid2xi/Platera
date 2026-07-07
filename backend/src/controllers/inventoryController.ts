@@ -73,6 +73,29 @@ export const updateInventoryItem = async (req: Request, res: Response, next: Nex
   }
 };
 
+export const deleteInventoryItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const restaurantId = req.user!.restaurantId;
+    const id = req.params.id as string;
+
+    const existing = await prisma.inventoryItem.findFirst({ where: { id, restaurantId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.menuItemInventoryLink.deleteMany({ where: { inventoryItemId: id } });
+      await tx.inventoryLog.deleteMany({ where: { inventoryItemId: id } });
+      await tx.inventoryItem.delete({ where: { id } });
+    });
+
+    res.json({ message: 'Deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const logInventory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const restaurantId = req.user!.restaurantId;

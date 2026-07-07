@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { useAuth } from "./AuthContext";
 
 export type OnboardingStepId = "menu_item" | "upload_logo" | "review_tables" | "invite_staff";
 
@@ -21,21 +22,36 @@ const DEFAULT_STATE: OnboardingState = {
   isDismissed: false,
 };
 
-const STORAGE_KEY = "platera_onboarding_state";
+const getStorageKey = (restaurantId: string | undefined) => 
+  `platera_onboarding_state_${restaurantId || "guest"}`;
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
+  const { restaurant } = useAuth();
+  const storageKey = getStorageKey(restaurant?.id);
+
   const [state, setState] = useState<OnboardingState>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(storageKey);
       return stored ? JSON.parse(stored) : DEFAULT_STATE;
     } catch {
       return DEFAULT_STATE;
     }
   });
 
+  // Re-hydrate if restaurant ID changes (user logs out/in)
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    try {
+      const stored = localStorage.getItem(storageKey);
+      setState(stored ? JSON.parse(stored) : DEFAULT_STATE);
+    } catch {
+      setState(DEFAULT_STATE);
+    }
+  }, [storageKey]);
+
+  // Save to local storage whenever state changes
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify(state));
+  }, [state, storageKey]);
 
   const markStepComplete = (step: OnboardingStepId) => {
     setState((prev) => {

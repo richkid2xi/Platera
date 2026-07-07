@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useOrder } from '@/contexts/OrderContext';
 import DesktopNav from '@/pages/order/components/DesktopNav';
-import { apiClient } from '@/api/client';export default function Checkout() {
+import { apiClient } from '@/api/client';
+
+export default function Checkout() {
   const { token } = useParams<{ token: string }>();
   const { cart: items, subtotal, serviceCharge, total, paymentMethod, dispatch, tableNumber } = useOrder();
   const navigate = useNavigate();

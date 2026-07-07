@@ -11,11 +11,20 @@ export const apiClient = axios.create({
   },
 });
 
-// Add an interceptor to handle 401 Unauthorized responses globally
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    // If the server is completely unreachable (CORS, offline, server down), there's no response.
+    if (!error.response) {
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        const friendlyError = new Error('Server cannot be reached. Please check your connection or try again later.');
+        (friendlyError as any).isNetworkError = true;
+        return Promise.reject(friendlyError);
+      }
+      return Promise.reject(error);
+    }
+
+    if (error.response.status === 401) {
       // If we get a 401, it means the session cookie is invalid or expired.
       // We can dispatch an event or handle it in AuthContext to log the user out.
       window.dispatchEvent(new Event('auth:unauthorized'));

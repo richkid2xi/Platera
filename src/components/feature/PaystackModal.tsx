@@ -7,10 +7,10 @@ export default function PaystackModal() {
   const { 
     showPaymentModal, 
     closePaymentModal, 
-    simulateRenewal, 
     subscription,
     renewalSuccess,
-    dismissRenewalSuccess 
+    dismissRenewalSuccess,
+    authUrl
   } = useSubscription();
   const [iframeLoading, setIframeLoading] = useState(true);
 
@@ -76,12 +76,12 @@ export default function PaystackModal() {
               </p>
             </div>
           )}
-          {/* Placeholder: real Paystack popup / inline JS injected here on backend connect */}
+          {/* Real Paystack checkout injected via authUrl */}
           <iframe
-            src="about:blank"
+            src={authUrl || "about:blank"}
             title="Paystack Checkout"
             className="w-full"
-            style={{ height: 300, border: 'none', display: iframeLoading ? 'none' : 'block' }}
+            style={{ height: 400, border: 'none', display: iframeLoading ? 'none' : 'block' }}
             onLoad={() => setIframeLoading(false)}
           />
           {/* Placeholder content when iframe has no src */}
@@ -91,19 +91,6 @@ export default function PaystackModal() {
               Payment form will appear here once<br />Paystack integration is connected.
             </p>
           </div>
-        </div>
-
-        {/* DEV: Simulate Successful Payment */}
-        <div className="mx-6 mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
-          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1.5">
-            <i className="ri-flask-line" /> Dev mode — simulate payment
-          </p>
-          <button
-            onClick={simulateRenewal}
-            className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"
-          >
-            <i className="ri-check-double-line" /> Simulate Successful Payment
-          </button>
         </div>
 
         {/* Security badges */}

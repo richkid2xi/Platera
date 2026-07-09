@@ -182,6 +182,11 @@ export default function OrderStatus() {
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const socketConnectedRef = useRef(false);
 
+  const maxPrepTime = displayItems.reduce((max, item: any) => {
+    const time = item.prepTime || item.menuItem?.prepTime || 12;
+    return Math.max(max, time);
+  }, 0) || 12;
+
   // Real-time: join the order's socket room for instant status updates
   useSocketRoom(
     currentOrder?.id ? `order:${currentOrder.id}` : null,
@@ -262,7 +267,7 @@ export default function OrderStatus() {
         <div className="space-y-6">
           <ProgressTracker currentStep={currentOrder.status} />
           {currentOrder.status !== 'READY' && currentOrder.status !== 'SERVED' && (
-            <WaitTimeDisplay minutes={12} />
+            <WaitTimeDisplay minutes={maxPrepTime} />
           )}
           <GameSwitcher />
 

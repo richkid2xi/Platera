@@ -1,6 +1,7 @@
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
+import { injectThemeColor } from '@/utils/theme';
 
 export interface CustomerContextType {
   restaurant: {
@@ -8,6 +9,8 @@ export interface CustomerContextType {
     name: string;
     logoUrl: string | null;
     paystackPublicKey: string | null;
+    paymentSettings?: any;
+    appearanceSettings?: any;
   } | null;
   table: {
     id: string;
@@ -33,6 +36,12 @@ export function CustomerProvider({ token, children }: { token: string | undefine
     retry: false,
     staleTime: Infinity,
   });
+
+  useEffect(() => {
+    if (data?.restaurant?.appearanceSettings?.primaryColor) {
+      injectThemeColor(data.restaurant.appearanceSettings.primaryColor);
+    }
+  }, [data?.restaurant?.appearanceSettings?.primaryColor]);
 
   return (
     <CustomerContext.Provider 

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
 
 function StarRating({ rating }: { rating: number }) {
@@ -16,13 +16,15 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export default function FeedbackWidget() {
-  const [feedbacks, setFeedbacks] = useState<any[]>([]);
+  const { data: allFeedback = [] } = useQuery({
+    queryKey: ['feedback', 'recent'],
+    queryFn: async () => {
+      const res = await apiClient.get('/feedback');
+      return res.data || [];
+    }
+  });
 
-  useEffect(() => {
-    apiClient.get('/feedback').then((res) => {
-      setFeedbacks(res.data?.slice(0, 4) || []);
-    }).catch(() => {});
-  }, []);
+  const recentFeedback = allFeedback.slice(0, 3);
 
   return (
     <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 p-5 hover:-translate-y-1 hover:shadow-xl transition-all duration-300 group h-full flex flex-col">
@@ -33,17 +35,14 @@ export default function FeedbackWidget() {
         </Link>
       </div>
 
-      {feedbacks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-6 text-center">
-          <div className="w-16 h-16 bg-background-100 dark:bg-foreground-800 rounded-full flex items-center justify-center mb-3">
-            <i className="ri-chat-smile-2-line text-3xl text-foreground-400"></i>
-          </div>
-          <h4 className="text-foreground-900 dark:text-foreground-100 font-medium font-heading">No Recent Feedback</h4>
-          <p className="text-sm text-foreground-500 mt-1 font-body">Customers haven't left any feedback yet.</p>
+      {recentFeedback.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-full text-foreground-400 py-6">
+          <i className="ri-chat-smile-2-line text-3xl mb-2 opacity-50"></i>
+          <p className="text-sm font-semibold">No recent feedback</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {feedbacks.map((fb) => (
+          {recentFeedback.map((fb: any) => (
             <div key={fb.id} className="flex gap-3 p-2.5 rounded-lg hover:bg-background-50 dark:hover:bg-foreground-800/50 transition-colors cursor-pointer">
               <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
                 fb.overallRating >= 4 ? 'bg-secondary-50 dark:bg-secondary-900/30' : fb.overallRating === 3 ? 'bg-accent-50 dark:bg-accent-900/30' : 'bg-red-50 dark:bg-red-900/30'

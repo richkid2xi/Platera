@@ -1,17 +1,19 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
 
 export default function LowStockWidget() {
-  const [items, setItems] = useState<any[]>([]);
+  const { data: allItems = [] } = useQuery({
+    queryKey: ['inventory', 'low-stock'],
+    queryFn: async () => {
+      const res = await apiClient.get('/inventory');
+      return res.data || [];
+    }
+  });
 
-  useEffect(() => {
-    apiClient.get('/inventory').then((res) => {
-      const all = res.data || [];
-      const low = all.filter((i: any) => Number(i.currentStock) <= Number(i.lowStockThreshold));
-      setItems(low.slice(0, 5)); // show top 5 low stock
-    }).catch(() => {});
-  }, []);
+  const items = allItems
+    .filter((i: any) => Number(i.currentStock) <= Number(i.lowStockThreshold))
+    .slice(0, 5);
 
   return (
     <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 p-5 hover:-translate-y-1 hover:shadow-xl transition-all duration-300 group h-full flex flex-col">
@@ -37,7 +39,7 @@ export default function LowStockWidget() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {items.map((item) => {
+          {items.map((item: any) => {
             const stock = Number(item.currentStock);
             const threshold = Number(item.lowStockThreshold);
             const isCritical = stock <= threshold * 0.3;

@@ -93,13 +93,26 @@ export default function Menu() {
         </p>
       </div>
 
-      <CategoryTabs
-        activeCategory={activeCategory}
-        onCategoryChange={handleCategoryChange}
-      />
+      {menu.length > 0 && (
+        <CategoryTabs
+          activeCategory={activeCategory}
+          onCategoryChange={handleCategoryChange}
+        />
+      )}
 
-      <div className="px-4 pt-4 space-y-8 max-w-7xl mx-auto w-full">
-        {menu.map((cat: any) => {
+      {menu.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center animate-fade-in">
+          <div className="w-48 h-48 mb-6 drop-shadow-sm">
+            <img src="/empty-menu.png" alt="Menu is empty" className="w-full h-full object-contain" />
+          </div>
+          <h3 className="font-heading font-bold text-xl text-foreground-900 mb-2">Our Menu is Cooking!</h3>
+          <p className="font-body text-sm text-foreground-500 max-w-[260px] mx-auto leading-relaxed">
+            We haven't added any items to our digital menu yet. Please ask a staff member for assistance.
+          </p>
+        </div>
+      ) : (
+        <div className="px-4 pt-4 space-y-8 max-w-7xl mx-auto w-full">
+          {menu.map((cat: any) => {
           const items = cat.items || [];
           return (
             <div
@@ -145,8 +158,9 @@ export default function Menu() {
               )}
             </div>
           );
-        })}
-      </div>
+          })}
+        </div>
+      )}
 
 
       <BottomNav />

@@ -13,6 +13,8 @@ import UnsavedChangesModal from "./components/feature/UnsavedChangesModal";
 import LockedScreen from "./components/feature/LockedScreen";
 import PaystackModal from "./components/feature/PaystackModal";
 import AuthLoaders from "./components/feature/AuthLoaders";
+import GlobalErrorBoundary from "./components/feature/GlobalErrorBoundary";
+import GlobalToastProvider from "./components/feature/GlobalToastProvider";
 
 function App() {
   return (
@@ -23,13 +25,16 @@ function App() {
             <OnboardingProvider>
               <UnsavedChangesProvider>
                 <I18nextProvider i18n={i18n}>
-                  <BrowserRouter basename={import.meta.env.BASE_URL}>
-                    <AppRoutes />
-                    <UnsavedChangesModal />
-                    <LockedScreen />
-                    <PaystackModal />
-                    <AuthLoaders />
-                  </BrowserRouter>
+                  <GlobalErrorBoundary>
+                    <BrowserRouter basename={import.meta.env.BASE_URL}>
+                      <AppRoutes />
+                      <UnsavedChangesModal />
+                      <LockedScreen />
+                      <PaystackModal />
+                      <AuthLoaders />
+                      <GlobalToastProvider />
+                    </BrowserRouter>
+                  </GlobalErrorBoundary>
                 </I18nextProvider>
               </UnsavedChangesProvider>
             </OnboardingProvider>

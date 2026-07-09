@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
 
 const statuses = [
@@ -11,14 +11,16 @@ const statuses = [
 ];
 
 export default function LiveOrdersWidget() {
-  const [orders, setOrders] = useState<any[]>([]);
-
-  useEffect(() => {
-    apiClient.get('/orders').then(res => setOrders(res.data)).catch(() => {});
-  }, []);
+  const { data: orders = [] } = useQuery({
+    queryKey: ['orders', 'active'],
+    queryFn: async () => {
+      const res = await apiClient.get('/orders');
+      return res.data;
+    }
+  });
 
   const liveOrdersSummary = statuses.reduce((acc, s) => {
-    acc[s.key] = orders.filter(o => o.status === s.key).length;
+    acc[s.key] = orders.filter((o: any) => o.status === s.key).length;
     return acc;
   }, {} as Record<string, number>);
 

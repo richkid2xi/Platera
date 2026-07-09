@@ -11,6 +11,7 @@ interface CustomSelectProps {
   options: (SelectOption | string)[];
   placeholder?: string;
   className?: string;
+  buttonClassName?: string;
   disabled?: boolean;
 }
 
@@ -20,6 +21,7 @@ export default function CustomSelect({
   options,
   placeholder = 'Select...',
   className = '',
+  buttonClassName = '',
   disabled = false,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -48,7 +50,7 @@ export default function CustomSelect({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between px-3 py-2 bg-background-50 dark:bg-foreground-900 border border-background-200 dark:border-foreground-800 rounded-lg text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-500 font-body transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-background-300 dark:hover:border-foreground-700 cursor-pointer'}`}
+        className={`w-full flex items-center justify-between bg-white dark:bg-foreground-900 border border-background-200 dark:border-foreground-800 rounded-lg text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-500 font-body transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-background-300 dark:hover:border-foreground-700 cursor-pointer'} ${buttonClassName || 'px-3 py-2.5'}`}
       >
         <span className={selectedOption ? 'text-foreground-900 dark:text-foreground-100 truncate' : 'text-foreground-400 truncate'}>
           {selectedOption ? selectedOption.label : placeholder}

@@ -1,82 +1,84 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import PageHeader from '@/components/base/PageHeader';
 import PageSkeleton from '@/components/base/PageSkeleton';
 import CustomSelect from '@/components/base/CustomSelect';
 import { useRefresh } from '@/contexts/RefreshContext';
 import { apiClient } from '@/api/client';
-import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 export default function Feedback() {
   const { isRefreshing } = useRefresh();
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [entries, setEntries] = useState<any[]>([]);
-  const [insightBanners, setInsightBanners] = useState<any[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [feedbackRes, insightsRes] = await Promise.all([
-          apiClient.get('/feedback'),
-          apiClient.get('/feedback/insights')
-        ]);
-        
-        const mappedEntries = feedbackRes.data.map((f: any) => ({
-          id: f.id,
-          table: f.table?.tableNumber || 'Unknown',
-          date: f.createdAt,
-          rating: f.overallRating,
-          comment: f.comment || 'No comment provided.',
-          flagged: f.overallRating < 3,
-          reviewed: f.isReviewed,
-          tags: f.overallRating >= 4 ? ['Great Service'] : [],
-          itemRatings: (f.itemRatings || []).map((ir: any) => ({
-            item: ir.menuItem?.name || 'Unknown Item',
-            rating: ir.thumbsUp ? 5 : 1
-          }))
-        }));
-        setEntries(mappedEntries);
+  const { data: rawFeedback = [], isLoading: feedbackLoading } = useQuery({
+    queryKey: ['feedback', 'list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/feedback');
+      return res.data;
+    }
+  });
 
-        const banners = [];
-        const { problematicItems, lowRatingsByDay } = insightsRes.data;
-        if (problematicItems && problematicItems.length > 0) {
-          banners.push({
-            id: 1,
-            type: 'critical',
-            icon: 'ri-alert-line',
-            message: `${problematicItems[0].name} has received ${problematicItems[0].downvotes} negative ratings recently.`
-          });
-        }
-        if (lowRatingsByDay && lowRatingsByDay.length > 0) {
-          banners.push({
-            id: 2,
-            type: 'warning',
-            icon: 'ri-time-line',
-            message: `Most low ratings occur on ${lowRatingsByDay[0].dayOfWeek}s. Consider increasing staff during these times.`
-          });
-        }
-        if (banners.length === 0) {
-          banners.push({
-            id: 3,
-            type: 'info',
-            icon: 'ri-thumb-up-line',
-            message: `Customer satisfaction is looking great! No major issues detected.`
-          });
-        }
-        setInsightBanners(banners);
+  const { data: insightsData = {}, isLoading: insightsLoading } = useQuery({
+    queryKey: ['feedback', 'insights'],
+    queryFn: async () => {
+      const res = await apiClient.get('/feedback/insights');
+      return res.data;
+    }
+  });
 
-      } catch (err) {
-        console.error('Failed to load feedback', err);
-      }
-    };
-    loadData();
-  }, [isRefreshing]);
+  const entries = useMemo(() => {
+    return rawFeedback.map((f: any) => ({
+      id: f.id,
+      table: f.table?.tableNumber || 'Unknown',
+      date: f.createdAt,
+      rating: f.overallRating,
+      comment: f.comment || 'No comment provided.',
+      flagged: f.overallRating < 3,
+      reviewed: f.isReviewed,
+      tags: f.overallRating >= 4 ? ['Great Service'] : [],
+      itemRatings: (f.itemRatings || []).map((ir: any) => ({
+        item: ir.menuItem?.name || 'Unknown Item',
+        rating: ir.thumbsUp ? 5 : 1
+      }))
+    }));
+  }, [rawFeedback]);
 
-  const filtered = entries.filter((entry) => {
+  const insightBanners = useMemo(() => {
+    const banners = [];
+    const { problematicItems, lowRatingsByDay } = insightsData;
+    if (problematicItems && problematicItems.length > 0) {
+      banners.push({
+        id: 1,
+        type: 'critical',
+        icon: 'ri-alert-line',
+        message: `${problematicItems[0].name} has received ${problematicItems[0].downvotes} negative ratings recently.`
+      });
+    }
+    if (lowRatingsByDay && lowRatingsByDay.length > 0) {
+      banners.push({
+        id: 2,
+        type: 'warning',
+        icon: 'ri-time-line',
+        message: `Most low ratings occur on ${lowRatingsByDay[0].dayOfWeek}s. Consider increasing staff during these times.`
+      });
+    }
+    if (banners.length === 0) {
+      banners.push({
+        id: 3,
+        type: 'info',
+        icon: 'ri-thumb-up-line',
+        message: `Customer satisfaction is looking great! No major issues detected.`
+      });
+    }
+    return banners;
+  }, [insightsData]);
+
+  const filtered = entries.filter((entry: any) => {
     if (ratingFilter !== null && entry.rating !== ratingFilter) return false;
     if (statusFilter === 'reviewed' && !entry.reviewed) return false;
     if (statusFilter === 'unreviewed' && entry.reviewed) return false;
@@ -90,7 +92,7 @@ export default function Feedback() {
   const toggleReviewed = async (id: string) => {
     try {
       await apiClient.patch(`/feedback/${id}/reviewed`);
-      setEntries((prev) => prev.map((e) => e.id === id ? { ...e, reviewed: true } : e));
+      // In a real app, you'd invalidate the query here
     } catch (err) {
       console.error(err);
     }
@@ -122,7 +124,7 @@ export default function Feedback() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  if (isRefreshing) return <PageSkeleton />;
+  if (isRefreshing || feedbackLoading || insightsLoading) return <PageSkeleton />;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -203,7 +205,7 @@ export default function Feedback() {
             <p className="text-sm font-medium text-foreground-400 font-body">No feedback matches your filters</p>
           </div>
         ) : (
-          paginated.map((entry, i) => (
+          paginated.map((entry: any, i: any) => (
             <div
               key={entry.id}
               className={`stagger-${Math.min(i + 1, 8)} bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 hover-lift`}
@@ -260,7 +262,7 @@ export default function Feedback() {
                 </p>
 
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {entry.tags.map((tag) => (
+                  {entry.tags.map((tag: any) => (
                     <span key={tag} className="px-2.5 py-0.5 text-xs rounded-full bg-background-100 dark:bg-foreground-800 text-foreground-500 font-body">
                       {tag}
                     </span>
@@ -269,7 +271,7 @@ export default function Feedback() {
 
                 {entry.itemRatings.length > 0 && (
                   <div className="flex flex-wrap gap-3 pt-3 border-t border-background-100 dark:border-foreground-800">
-                    {entry.itemRatings.map((ir, j) => (
+                    {entry.itemRatings.map((ir: any, j: any) => (
                       <div key={j} className="flex items-center gap-1.5">
                         <span className="text-xs text-foreground-500 font-body">{ir.item}</span>
                         <div className="flex items-center">

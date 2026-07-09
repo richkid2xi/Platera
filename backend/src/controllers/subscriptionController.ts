@@ -25,7 +25,7 @@ export const initializeSubscriptionPayment = async (req: Request, res: Response,
     const paystackSecret = env.PAYSTACK_SECRET_KEY;
     if (!paystackSecret) throw new Error('PAYSTACK_SECRET_KEY not configured');
 
-    const response = await fetch('https://api.api.paystack.co/transaction/initialize', {
+    const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${paystackSecret}`,
@@ -76,7 +76,11 @@ export const getSubscriptionStatus = async (req: Request, res: Response, next: N
       }
     });
 
-    res.json(restaurant);
+    res.json({
+      ...restaurant,
+      planName: 'Platera Pro',
+      planPrice: 250
+    });
   } catch (error) {
     next(error);
   }

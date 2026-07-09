@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import ManualOrderModal from './ManualOrderModal';
 import { useRefresh } from '@/contexts/RefreshContext';
 import PageHeader from '@/components/base/PageHeader';
 import { apiClient } from '@/api/client';
@@ -343,12 +342,12 @@ export default function LiveOrders() {
   const queryClient = useQueryClient();
   const [filterTable, setFilterTable] = useState('');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' | 'error' } | null>(null);
 
   const { data: orders = [], isLoading } = useQuery<Order[]>({
     queryKey: ['orders'],
     queryFn: async () => {
-      const res = await apiClient.get('/orders');
+      const res = await apiClient.get('/orders?status=ACTIVE');
       return res.data;
     },
     refetchInterval: 30000, // Fallback poll every 30s in case socket events are missed
@@ -381,8 +380,6 @@ export default function LiveOrders() {
     toStatus: OrderStatus;
   } | null>(null);
 
-  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollBy({ left: -300, behavior: 'smooth' });
@@ -399,12 +396,20 @@ export default function LiveOrders() {
     mutationFn: async ({ id, status }: { id: string, status: OrderStatus }) => {
       await apiClient.patch(`/orders/${id}/status`, { status });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+      const previousOrders = queryClient.getQueryData<Order[]>(['orders']);
+      queryClient.setQueryData<Order[]>(['orders'], (old = []) => 
+        old.map(o => o.id === id ? { ...o, status } : o)
+      );
       setSingleConfirm(null);
+      return { previousOrders };
     },
-    onError: () => {
-      setToast({ message: 'Failed to update order status', type: 'error' });
+    onError: (err: any, _variables, context) => {
+      if (context?.previousOrders) {
+        queryClient.setQueryData(['orders'], context.previousOrders);
+      }
+      setToast({ message: err.response?.data?.error || 'Failed to update order status', type: 'error' });
     }
   });
 
@@ -412,10 +417,18 @@ export default function LiveOrders() {
     mutationFn: async (id: string) => {
       await apiClient.patch(`/orders/manual/${id}/confirm-payment`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['orders'] });
+      const previousOrders = queryClient.getQueryData<Order[]>(['orders']);
+      queryClient.setQueryData<Order[]>(['orders'], (old = []) => 
+        old.map(o => o.id === id ? { ...o, paymentStatus: 'PAID' } : o)
+      );
+      return { previousOrders };
     },
-    onError: (error: any) => {
+    onError: (error: any, _variables, context) => {
+      if (context?.previousOrders) {
+        queryClient.setQueryData(['orders'], context.previousOrders);
+      }
       setToast({ message: error.response?.data?.error || 'Failed to confirm payment', type: 'error' });
     }
   });
@@ -464,12 +477,6 @@ export default function LiveOrders() {
               className="pl-9 pr-4 py-2 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 placeholder-foreground-400 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 w-44 font-body"
             />
           </div>
-          <button
-            onClick={() => setIsManualModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-all cursor-pointer whitespace-nowrap shadow-sm"
-          >
-            <i className="ri-add-line"></i> Manual Order
-          </button>
         </PageHeader>
       </div>
 
@@ -599,14 +606,6 @@ export default function LiveOrders() {
         onConfirm={executeSingleChange}
         order={singleConfirm ? orders.find((o) => o.id === singleConfirm.orderId) || null : null}
         toStatus={singleConfirm?.toStatus || 'NEW'}
-      />
-
-      <ManualOrderModal
-        isOpen={isManualModalOpen}
-        onClose={() => setIsManualModalOpen(false)}
-        onOrderCreated={() => {
-          queryClient.invalidateQueries({ queryKey: ['orders'] });
-        }}
       />
     </div>
   );

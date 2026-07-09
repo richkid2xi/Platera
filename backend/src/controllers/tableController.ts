@@ -1,22 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import QRCode from 'qrcode';
-import { createClient } from '@supabase/supabase-js';
-import { env } from '../config/env';
 import prisma from '../utils/prisma';
-import { createTableSchema } from '../utils/schemas';
-
-const supabase = createClient(
-  env.SUPABASE_URL,
-  env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { createTableSchema, updateTableSchema } from '../utils/schemas';
+import { logAction } from '../utils/auditLogger';
 
 export const getTables = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const restaurantId = req.user!.restaurantId;
 
     const tables = await prisma.table.findMany({
-      where: { restaurantId },
+      where: { restaurantId, status: 'ACTIVE' },
       include: {
         tokens: {
           where: { isActive: true },
@@ -43,35 +36,12 @@ export const createTable = async (req: Request, res: Response, next: NextFunctio
     const data = createTableSchema.parse(req.body);
 
     const token = crypto.randomBytes(16).toString('hex');
-    const orderUrl = `${env.CLIENT_URL}/order/${token}`;
-
-    // Generate QR code image buffer
-    const qrBuffer = await QRCode.toBuffer(orderUrl, {
-      errorCorrectionLevel: 'H',
-      type: 'png',
-      margin: 2,
-    });
-
-    // Upload to Supabase Storage
-    const fileName = `${restaurantId}/qr_${token}.png`;
-    const { error: uploadError } = await supabase
-      .storage
-      .from('table-qrs') // assuming table-qrs bucket as discussed
-      .upload(fileName, qrBuffer, { contentType: 'image/png' });
-
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase
-      .storage
-      .from('table-qrs')
-      .getPublicUrl(fileName);
 
     const table = await prisma.table.create({
       data: {
         restaurantId,
         tableNumber: data.tableNumber,
         capacity: data.capacity,
-        qrCodeUrl: publicUrl,
         tokens: {
           create: [{ token }]
         }
@@ -81,7 +51,51 @@ export const createTable = async (req: Request, res: Response, next: NextFunctio
       }
     });
 
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Created — Table '${table.tableNumber}' by ${req.user!.name}`,
+      entityType: 'Table',
+      entityId: table.id
+    });
+
     res.status(201).json(table);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateTable = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const restaurantId = req.user!.restaurantId;
+    const tableId = req.params.id as string;
+    const data = updateTableSchema.parse(req.body);
+
+    const table = await prisma.table.findFirst({
+      where: { id: tableId, restaurantId, status: 'ACTIVE' }
+    });
+
+    if (!table) {
+      res.status(404).json({ error: 'Table not found' });
+      return;
+    }
+
+    const updatedTable = await prisma.table.update({
+      where: { id: tableId },
+      data: {
+        capacity: data.capacity
+      }
+    });
+
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Edited — Table '${updatedTable.tableNumber}' by ${req.user!.name}`,
+      entityType: 'Table',
+      entityId: updatedTable.id
+    });
+
+    res.json(updatedTable);
   } catch (error) {
     next(error);
   }
@@ -93,7 +107,7 @@ export const regenerateToken = async (req: Request, res: Response, next: NextFun
     const tableId = req.params.id as string;
 
     const table = await prisma.table.findFirst({
-      where: { id: tableId, restaurantId }
+      where: { id: tableId, restaurantId, status: 'ACTIVE' }
     });
 
     if (!table) {
@@ -102,17 +116,6 @@ export const regenerateToken = async (req: Request, res: Response, next: NextFun
     }
 
     const token = crypto.randomBytes(16).toString('hex');
-    const orderUrl = `${env.CLIENT_URL}/order/${token}`;
-
-    const qrBuffer = await QRCode.toBuffer(orderUrl, {
-      errorCorrectionLevel: 'H',
-      type: 'png',
-      margin: 2,
-    });
-
-    const fileName = `${restaurantId}/qr_${token}.png`;
-    await supabase.storage.from('table-qrs').upload(fileName, qrBuffer, { contentType: 'image/png' });
-    const { data: { publicUrl } } = supabase.storage.from('table-qrs').getPublicUrl(fileName);
 
     const updatedTable = await prisma.$transaction(async (tx) => {
       // Invalidate existing tokens
@@ -125,13 +128,20 @@ export const regenerateToken = async (req: Request, res: Response, next: NextFun
       return tx.table.update({
         where: { id: tableId },
         data: {
-          qrCodeUrl: publicUrl,
           tokens: {
             create: [{ token }]
           }
         },
         include: { tokens: { where: { isActive: true } } }
       });
+    });
+
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Token regenerated — Table '${table.tableNumber}' by ${req.user!.name}`,
+      entityType: 'Table',
+      entityId: table.id
     });
 
     res.json(updatedTable);
@@ -145,16 +155,45 @@ export const deleteTable = async (req: Request, res: Response, next: NextFunctio
     const restaurantId = req.user!.restaurantId;
     const tableId = req.params.id as string;
 
-    const table = await prisma.table.findFirst({ where: { id: tableId, restaurantId } });
+    const table = await prisma.table.findFirst({ 
+      where: { id: tableId, restaurantId, status: 'ACTIVE' },
+      include: {
+        orders: {
+          where: {
+            status: { notIn: ['SERVED', 'CANCELLED'] }
+          },
+          take: 1
+        }
+      }
+    });
+
     if (!table) {
       res.status(404).json({ error: 'Table not found' });
       return;
     }
 
-    // A real system might soft delete if orders exist, but we hard delete related tokens here
+    if (table.orders.length > 0) {
+      res.status(400).json({ error: 'Cannot delete table with active orders' });
+      return;
+    }
+
     await prisma.$transaction(async (tx) => {
-      await tx.tableToken.deleteMany({ where: { tableId } });
-      await tx.table.delete({ where: { id: tableId } });
+      await tx.tableToken.updateMany({ 
+        where: { tableId },
+        data: { isActive: false }
+      });
+      await tx.table.update({ 
+        where: { id: tableId },
+        data: { status: 'INACTIVE' }
+      });
+    });
+
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Deleted — Table '${table.tableNumber}' by ${req.user!.name}`,
+      entityType: 'Table',
+      entityId: table.id
     });
 
     res.json({ message: 'Table deleted successfully' });

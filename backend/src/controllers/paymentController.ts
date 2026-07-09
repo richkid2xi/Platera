@@ -54,6 +54,7 @@ export const initializeOrderPayment = async (req: Request, res: Response, next: 
       body: JSON.stringify({
         email: order.restaurant.contactEmail, // Using restaurant email as fallback if customer didn't provide one
         amount: amountInSubunits,
+        channels: ['card', 'mobile_money'],
         metadata: {
           type: 'ORDER',
           orderId: order.id

@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import ShutterImagePanel from "@/components/feature/ShutterImagePanel";
+import CustomSelect from "@/components/base/CustomSelect";
+import { apiClient } from "@/api/client";
 
 // ── Animated counter hook ──────────────────────────────────────────
 function useCountUp(target: number, duration = 1800, start = false) {
@@ -107,6 +109,28 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const [emailInUse, setEmailInUse] = useState(false);
+
+  useEffect(() => {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailInUse(false);
+      return;
+    }
+    const delay = setTimeout(async () => {
+      setIsCheckingEmail(true);
+      try {
+        const res = await apiClient.get(`/auth/check-email?email=${encodeURIComponent(email)}`);
+        setEmailInUse(res.data.inUse);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsCheckingEmail(false);
+      }
+    }, 500);
+    return () => clearTimeout(delay);
+  }, [email]);
+  
   const [statsVisible, setStatsVisible] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
 
@@ -127,7 +151,7 @@ export default function SignUp() {
   const isPasswordValid = password.length >= 8;
   const isConfirmPasswordValid = password === confirmPassword;
   
-  const isStep1Valid = name.trim() && isPhoneValid && isEmailValid && isPasswordValid && isConfirmPasswordValid;
+  const isStep1Valid = name.trim() && isPhoneValid && isEmailValid && !emailInUse && isPasswordValid && isConfirmPasswordValid;
 
   // Inline Validation for Step 2
   const isStep2Valid = restaurantName.trim() && businessType && address.trim() && tablesCount !== "" && Number(tablesCount) > 0;
@@ -166,7 +190,13 @@ export default function SignUp() {
       
       navigate("/dashboard", { replace: true });
     } catch (err: any) {
-      setError(err.response?.data?.error || "Registration failed. Please try again.");
+      if (err.isNetworkError || err.code === 'ERR_NETWORK' || !err.response) {
+        setError("Cannot connect to the server. Please check your internet connection and try again.");
+      } else if (err.response?.status === 429) {
+        setError("Too many registration attempts. Please wait a moment and try again.");
+      } else {
+        setError(err.response?.data?.error || "Registration failed. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -368,7 +398,22 @@ export default function SignUp() {
                   </div>
                   {email && !isEmailValid && (
                     <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                      <i className="ri-error-warning-line"></i> Please enter a valid email.
+                      <i className="ri-error-warning-line"></i> Please enter a valid email address.
+                    </p>
+                  )}
+                  {isEmailValid && isCheckingEmail && (
+                    <p className="text-xs text-foreground-400 mt-1 flex items-center gap-1">
+                      <i className="ri-loader-4-line animate-spin"></i> Checking availability...
+                    </p>
+                  )}
+                  {isEmailValid && !isCheckingEmail && emailInUse && (
+                    <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                      <i className="ri-error-warning-fill"></i> Email is already in use.
+                    </p>
+                  )}
+                  {isEmailValid && !isCheckingEmail && !emailInUse && email.length > 0 && (
+                    <p className="text-xs text-green-500 mt-1 flex items-center gap-1">
+                      <i className="ri-check-line"></i> Email is available.
                     </p>
                   )}
                 </div>
@@ -470,26 +515,24 @@ export default function SignUp() {
                   <label htmlFor="business-type" className="block text-sm font-semibold text-foreground-700 dark:text-foreground-300">
                     Business Type
                   </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-400 dark:text-foreground-500">
+                  <div className="relative z-50">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-400 dark:text-foreground-500 z-10">
                       <i className="ri-building-4-line text-base" />
                     </span>
-                    <select
-                      id="business-type"
+                    <CustomSelect
                       value={businessType}
-                      onChange={(e) => setBusinessType(e.target.value)}
-                      className="w-full pl-10 pr-10 py-3 appearance-none rounded-xl border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:focus:ring-primary-500 focus:border-transparent transition-all text-sm"
-                    >
-                      <option value="Restaurant">Restaurant</option>
-                      <option value="Bar">Bar</option>
-                      <option value="Café">Café</option>
-                      <option value="Fast Food">Fast Food</option>
-                      <option value="Hotel Restaurant">Hotel Restaurant</option>
-                      <option value="Other">Other</option>
-                    </select>
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-foreground-400 pointer-events-none">
-                      <i className="ri-arrow-down-s-line text-base" />
-                    </span>
+                      onChange={setBusinessType}
+                      options={[
+                        { label: 'Restaurant', value: 'Restaurant' },
+                        { label: 'Bar', value: 'Bar' },
+                        { label: 'Café', value: 'Café' },
+                        { label: 'Fast Food', value: 'Fast Food' },
+                        { label: 'Hotel Restaurant', value: 'Hotel Restaurant' },
+                        { label: 'Other', value: 'Other' },
+                      ]}
+                      className="w-full text-sm"
+                      buttonClassName="pl-10 pr-4 py-3"
+                    />
                   </div>
                 </div>
 

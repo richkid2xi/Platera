@@ -12,4 +12,5 @@ export const NAV_PERMISSIONS: Record<string, UserRole[]> = {
   '/staff': ['OWNER', 'MANAGER'],
   '/settings': ['OWNER'],
   '/audit': ['OWNER', 'MANAGER'],
+  '/manual-order': ['OWNER', 'MANAGER', 'STAFF'],
 };

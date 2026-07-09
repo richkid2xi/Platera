@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useOrder } from '@/contexts/OrderContext';
 import DesktopNav from '@/pages/order/components/DesktopNav';
 import { apiClient } from '@/api/client';
+import PaystackPop from '@paystack/inline-js';
 
 type PaymentStep = 'method' | 'details' | 'confirm' | 'processing' | 'done';
 
@@ -146,8 +147,6 @@ export default function Payment() {
   };
 
   const handleConfirmPayment = async () => {
-    setStep('processing');
-    setProcessingIndex(0);
     setPaymentError('');
 
     try {
@@ -162,11 +161,31 @@ export default function Payment() {
       };
       
       const response = await apiClient.post(`/public/order/${token}/orders`, orderPayload);
-      setOrderId(response.data.id);
+      const newOrderId = response.data.id;
+      setOrderId(newOrderId);
+
+      // Initialize payment with backend
+      const initResponse = await apiClient.post(`/public/order/${token}/payments/initialize`, { orderId: newOrderId });
+      const { access_code } = initResponse.data;
+
+      const paystack = new PaystackPop();
+      paystack.newTransaction({
+        key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || 'pk_test_47f8ba1ef2b8f8876402ecf048dffb0c51cf57b9',
+        email: payMethod === 'momo' ? `momo_${phoneNumber.replace(/\D/g, '')}@platera-guest.com` : 'card_guest@platera-guest.com',
+        amount: Math.round(total * 100),
+        access_code,
+        channels: payMethod === 'momo' ? ['mobile_money'] : ['card'],
+        onSuccess: () => {
+          dispatch({ type: 'PLACE_ORDER', payload: { total, orderId: newOrderId } });
+          setStep('done');
+        },
+        onCancel: () => {
+          setPaymentError('Payment was cancelled. You can try again.');
+        }
+      });
     } catch (error) {
       console.error('Failed to create order', error);
       setPaymentError('We could not create your order. Please try again.');
-      setStep('confirm');
     }
   };
 

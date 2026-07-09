@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import PageHeader from '@/components/base/PageHeader';
 import PageSkeleton from '@/components/base/PageSkeleton';
 import CustomSelect from '@/components/base/CustomSelect';
@@ -19,26 +20,68 @@ export default function Reports() {
   const [dateRange, setDateRange] = useState('week');
   const [chartView, setChartView] = useState<'revenue' | 'orders'>('revenue');
 
-  const [reportData, setReportData] = useState<any>(null);
+  const { data: reportData, isLoading: loading } = useQuery({
+    queryKey: ['reports', dateRange],
+    queryFn: async () => {
+      const res = await apiClient.get(`/reports?period=${dateRange}`);
+      return res.data;
+    }
+  });
 
-  useEffect(() => {
-    apiClient.get(`/reports?period=${dateRange}`)
-      .then(res => setReportData(res.data))
-      .catch(console.error);
-  }, [dateRange, isRefreshing]);
+  const isLoading = isRefreshing || loading;
 
   const COLORS = ['#FF6B35', '#FFC107', '#4DB696', '#BA9174'];
 
   const formatCurrency = (val: number) => `GH₵ ${val.toLocaleString()}`;
 
+  const handleExport = () => {
+    if (!reportData) return;
+    
+    const rows = [];
+    rows.push(['Sales Report']);
+    rows.push(['Period:', dateRange]);
+    rows.push([]);
+    
+    rows.push(['Summary']);
+    rows.push(['Metric', 'Value']);
+    rows.push(['Total Revenue', reportData.summary.totalRevenue.replace(/,/g, '')]);
+    rows.push(['Total Orders', reportData.summary.totalOrders]);
+    rows.push(['Average Order Value', reportData.summary.avgOrderValue.replace(/,/g, '')]);
+    rows.push(['Top Category', reportData.summary.topCategory]);
+    rows.push([]);
+    
+    rows.push(['Best Selling Items']);
+    rows.push(['Item', 'Category', 'Quantity', 'Revenue']);
+    reportData.bestSellersReport.forEach((item: any) => {
+      rows.push([`"${item.name}"`, `"${item.category}"`, item.quantity, item.revenue.replace(/,/g, '')]);
+    });
+    rows.push([]);
+    
+    rows.push(['Recent Transactions']);
+    rows.push(['Item', 'Quantity', 'Total', 'Status']);
+    reportData.recentTransactions.forEach((tx: any) => {
+      rows.push([`"${tx.item}"`, tx.qty, tx.total.replace(/,/g, ''), tx.status]);
+    });
+    
+    const csvContent = rows.map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `sales_report_${dateRange}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const summaryCards = reportData ? [
-    { label: 'Total Revenue', value: reportData.summary.totalRevenue, change: reportData.summary.revenueChange, up: true, icon: 'ri-money-dollar-circle-line', color: 'text-secondary-500 bg-secondary-50 dark:bg-secondary-900/20' },
-    { label: 'Total Orders', value: reportData.summary.totalOrders.toLocaleString(), change: reportData.summary.ordersChange, up: true, icon: 'ri-shopping-bag-3-line', color: 'text-primary-500 bg-primary-50 dark:bg-primary-900/20' },
-    { label: 'Avg Order Value', value: reportData.summary.avgOrderValue, change: reportData.summary.avgChange, up: true, icon: 'ri-line-chart-line', color: 'text-accent-500 bg-accent-50 dark:bg-accent-900/20' },
-    { label: 'Top Category', value: reportData.summary.topCategory, change: reportData.summary.topCategoryShare, up: true, icon: 'ri-restaurant-2-line', color: 'text-foreground-500 bg-background-100 dark:bg-foreground-800', upLabel: 'of revenue' },
+    { label: 'Total Revenue', value: reportData.summary.totalRevenue, change: reportData.summary.revenueChange, up: true, icon: 'ri-money-dollar-circle-line', color: 'text-secondary-500 bg-secondary-50 dark:bg-secondary-900/20', desc: 'Total sales across all payment types' },
+    { label: 'Total Orders', value: reportData.summary.totalOrders.toLocaleString(), change: reportData.summary.ordersChange, up: true, icon: 'ri-shopping-bag-3-line', color: 'text-primary-500 bg-primary-50 dark:bg-primary-900/20', desc: 'Number of successful orders placed' },
+    { label: 'Avg Order Value', value: reportData.summary.avgOrderValue, change: reportData.summary.avgChange, up: true, icon: 'ri-line-chart-line', color: 'text-accent-500 bg-accent-50 dark:bg-accent-900/20', desc: 'Average revenue generated per order' },
+    { label: 'Top Category', value: reportData.summary.topCategory, change: reportData.summary.topCategoryShare, up: true, icon: 'ri-restaurant-2-line', color: 'text-foreground-500 bg-background-100 dark:bg-foreground-800', upLabel: 'of revenue', desc: 'Most popular menu category' },
   ] : [];
 
-  if (isRefreshing || !reportData) return <PageSkeleton />;
+  if (isLoading) return <PageSkeleton />;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -54,7 +97,7 @@ export default function Reports() {
               options={dateRangeOptions}
             />
           </div>
-          <button className="px-4 py-2 text-xs font-semibold rounded-lg bg-secondary-500 text-white hover:bg-secondary-600 transition-all cursor-pointer whitespace-nowrap font-body">
+          <button onClick={handleExport} className="px-4 py-2 text-xs font-semibold rounded-lg bg-secondary-500 text-white hover:bg-secondary-600 transition-all cursor-pointer whitespace-nowrap font-body">
             <i className="ri-download-2-line mr-1.5"></i>Export Report
           </button>
         </div>
@@ -68,6 +111,7 @@ export default function Reports() {
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${card.color}`}>
                 <i className={`${card.icon} text-lg`}></i>
               </div>
+              <span className="text-sm font-semibold text-foreground-700 dark:text-foreground-300 font-body">{card.label}</span>
             </div>
             <p className="text-2xl font-bold text-foreground-950 dark:text-foreground-100 font-heading">{card.value}</p>
             <div className="flex items-center gap-1.5 mt-1">
@@ -76,6 +120,11 @@ export default function Reports() {
               </span>
               <span className="text-xs text-foreground-400 font-body">{card.upLabel || 'vs last period'}</span>
             </div>
+            {card.desc && (
+              <p className="text-xs text-foreground-500 mt-3 pt-3 border-t border-background-100 dark:border-foreground-800 font-body">
+                {card.desc}
+              </p>
+            )}
           </div>
         ))}
       </div>
@@ -163,9 +212,9 @@ export default function Reports() {
       {/* Financial & Payment Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Payment Methods */}
-        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
-          <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-5">Payment Methods</h3>
-          <div className="space-y-5 mt-2">
+        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5 h-[400px] flex flex-col">
+          <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-3">Payment Methods</h3>
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
             {reportData.paymentMethods.map((method: any) => (
               <div key={method.method}>
                 <div className="flex justify-between items-center mb-2">
@@ -184,9 +233,9 @@ export default function Reports() {
         </div>
 
         {/* Recent Transactions */}
-        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5 overflow-hidden flex flex-col">
-          <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-4">Recent Transactions</h3>
-          <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5 h-[400px] flex flex-col">
+          <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-3">Recent Transactions</h3>
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
             <div className="space-y-4">
               {reportData.recentTransactions.map((tx: any) => (
                 <div key={tx.id} className="flex items-center justify-between">
@@ -215,9 +264,9 @@ export default function Reports() {
       {/* Bottom Tables Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Best Sellers Table */}
-        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5">
-          <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-4">Best Selling Items</h3>
-          <div className="overflow-x-auto">
+        <div className="bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-800 p-5 h-[400px] flex flex-col">
+          <h3 className="text-base font-bold text-foreground-950 dark:text-foreground-100 font-heading mb-3">Best Selling Items</h3>
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
             <table className="w-full">
               <thead>
                 <tr className="text-xs font-semibold text-foreground-400 uppercase tracking-wider font-body border-b border-background-200 dark:border-foreground-800">

@@ -16,6 +16,11 @@ export const deductInventoryForOrder = async (
     }
   });
 
+  // Get a default system/owner user for automated logs once
+  const owner = await tx.user.findFirst({
+    where: { restaurantId, role: 'OWNER' }
+  });
+
   for (const item of orderItems) {
     // Find inventory links for this menu item
     const links = await tx.menuItemInventoryLink.findMany({
@@ -37,7 +42,9 @@ export const deductInventoryForOrder = async (
       });
 
       if (updateResult.count === 0) {
-        throw new Error(`Insufficient stock for inventory item ID: ${link.inventoryItemId}`);
+        const err = new Error(`Insufficient stock for inventory item ID: ${link.inventoryItemId}`);
+        (err as any).status = 400;
+        throw err;
       }
 
       // Fetch the updated item to log and check thresholds
@@ -46,11 +53,6 @@ export const deductInventoryForOrder = async (
       });
 
       if (!inventoryItem) continue;
-
-      // Get a default system/owner user for automated logs
-      const owner = await tx.user.findFirst({
-        where: { restaurantId, role: 'OWNER' }
-      });
 
       if (owner) {
         // Log the usage

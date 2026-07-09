@@ -75,6 +75,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       id: result.user.id,
       restaurantId: result.user.restaurantId,
       role: result.user.role,
+      name: result.user.name,
     });
 
     res.cookie('platera_auth_session', token, {
@@ -103,6 +104,8 @@ export const register = async (req: Request, res: Response, next: NextFunction):
         currentPeriodEndsAt: result.restaurant.currentPeriodEndsAt,
         gracePeriodEndsAt: result.restaurant.gracePeriodEndsAt,
         logoUrl: result.restaurant.logoUrl,
+        appearanceSettings: result.restaurant.appearanceSettings,
+        paymentSettings: result.restaurant.paymentSettings,
       },
     });
   } catch (error) {
@@ -154,6 +157,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       id: user.id,
       restaurantId: user.restaurantId,
       role: user.role,
+      name: user.name,
     });
 
     res.cookie('platera_auth_session', token, {
@@ -161,6 +165,13 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       secure: env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    await prisma.userActivityLog.create({
+      data: {
+        userId: user.id,
+        action: 'Logged in successfully'
+      }
     });
 
     res.json({
@@ -179,6 +190,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         currentPeriodEndsAt: user.restaurant.currentPeriodEndsAt,
         gracePeriodEndsAt: user.restaurant.gracePeriodEndsAt,
         logoUrl: user.restaurant.logoUrl,
+        appearanceSettings: user.restaurant.appearanceSettings,
+        paymentSettings: user.restaurant.paymentSettings,
       },
     });
   } catch (error) {
@@ -212,6 +225,8 @@ export const me = async (req: Request, res: Response, next: NextFunction): Promi
             currentPeriodEndsAt: true,
             gracePeriodEndsAt: true,
             logoUrl: true,
+            appearanceSettings: true,
+            paymentSettings: true,
           }
         }
       }
@@ -224,6 +239,107 @@ export const me = async (req: Request, res: Response, next: NextFunction): Promi
 
     const { restaurant, ...authUser } = user;
     res.json({ user: authUser, restaurant });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const checkEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { email } = req.query;
+    if (!email || typeof email !== 'string') {
+      res.status(400).json({ error: 'Email query parameter is required' });
+      return;
+    }
+    const user = await prisma.user.findUnique({ where: { email } });
+    res.json({ inUse: !!user });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ error: 'Email is required' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      // Return 200 to prevent email enumeration
+      res.status(200).json({ message: 'If an account with that email exists, an OTP has been sent.' });
+      return;
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken: otp,
+        resetTokenExpiry: expiry
+      }
+    });
+
+    // TODO: Wire up actual transactional email provider (e.g. SendGrid, Postmark)
+    console.log(`[EMAIL STUB] Forgot Password OTP for ${email}: ${otp}`);
+
+    res.status(200).json({ message: 'If an account with that email exists, an OTP has been sent.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyOTP = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      res.status(400).json({ error: 'Email and OTP are required' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || user.resetToken !== otp || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
+      res.status(400).json({ error: 'Invalid or expired OTP' });
+      return;
+    }
+
+    res.status(200).json({ message: 'OTP verified successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword || newPassword.length < 8) {
+      res.status(400).json({ error: 'Valid email, OTP, and new password (min 8 chars) are required' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || user.resetToken !== otp || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
+      res.status(400).json({ error: 'Invalid or expired OTP' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        resetToken: null,
+        resetTokenExpiry: null
+      }
+    });
+
+    res.status(200).json({ message: 'Password reset successfully' });
   } catch (error) {
     next(error);
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRefresh } from '@/contexts/RefreshContext';
 import { useAuth } from '@/contexts/AuthContext';
 import MetricCard from '@/components/base/MetricCard';
@@ -17,23 +17,21 @@ export default function Dashboard() {
   const { user } = useAuth();
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    apiClient.get('/dashboard/metrics').then(res => {
-      setData(res.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [isLoadingContext]);
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['dashboard', 'metrics'],
+    queryFn: async () => {
+      const res = await apiClient.get('/dashboard/metrics');
+      return res.data;
+    }
+  });
 
   const isLoading = isLoadingContext || loading;
 
   const cards = data?.metrics ? [
-    { id: '1', title: 'Total Revenue', value: `GH₵ ${data.metrics.revenue.toFixed(2)}`, change: data.metrics.revenueChange, trend: 'up' as const, icon: 'ri-money-dollar-circle-line', color: 'text-primary-500', bg: 'bg-primary-500/10' },
-    { id: '2', title: 'Orders', value: data.metrics.orders.toString(), change: data.metrics.ordersChange, trend: 'up' as const, icon: 'ri-shopping-bag-3-line', color: 'text-accent-500', bg: 'bg-accent-500/10' },
-    { id: '3', title: 'Active Tables', value: data.metrics.activeTables.toString(), change: data.metrics.activeTablesChange, trend: 'neutral' as const, icon: 'ri-restaurant-line', color: 'text-secondary-500', bg: 'bg-secondary-500/10' },
-    { id: '4', title: 'Total Customers', value: data.metrics.totalCustomers.toString(), change: data.metrics.totalCustomersChange, trend: 'up' as const, icon: 'ri-group-line', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { id: '1', label: 'Total Revenue', value: `GH₵ ${data.metrics.revenue.toFixed(2)}`, trend: data.metrics.revenueChange, trendUp: data.metrics.revenueChange >= 0, vsLabel: 'vs last period', icon: 'ri-money-dollar-circle-line' },
+    { id: '2', label: 'Orders', value: data.metrics.orders.toString(), trend: data.metrics.ordersChange, trendUp: data.metrics.ordersChange >= 0, vsLabel: 'vs last period', icon: 'ri-shopping-bag-3-line' },
+    { id: '3', label: 'Active Tables', value: data.metrics.activeTables.toString(), trend: data.metrics.activeTablesChange, trendUp: data.metrics.activeTablesChange >= 0, vsLabel: 'vs last period', icon: 'ri-restaurant-line' },
+    { id: '4', label: 'Total Customers', value: data.metrics.totalCustomers.toString(), trend: data.metrics.totalCustomersChange, trendUp: data.metrics.totalCustomersChange >= 0, vsLabel: 'vs last period', icon: 'ri-group-line' },
   ] : [];
 
   return (

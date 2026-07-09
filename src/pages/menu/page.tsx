@@ -54,10 +54,10 @@ function MenuItemCard({
   onSelect,
 }: {
   item: MenuItem;
-  onToggle: (id: number) => void;
-  onClick: (id: number) => void;
+  onToggle: (id: string | number) => void;
+  onClick: (id: string | number) => void;
   isSelected: boolean;
-  onSelect: (id: number, selected: boolean) => void;
+  onSelect: (id: string | number, selected: boolean) => void;
 }) {
   return (
     <div
@@ -147,10 +147,10 @@ function MenuListRow({
   onSelect,
 }: {
   item: MenuItem;
-  onToggle: (id: number) => void;
-  onClick: (id: number) => void;
+  onToggle: (id: string | number) => void;
+  onClick: (id: string | number) => void;
   isSelected: boolean;
-  onSelect: (id: number, selected: boolean) => void;
+  onSelect: (id: string | number, selected: boolean) => void;
 }) {
   return (
     <div
@@ -296,12 +296,34 @@ export default function MenuManagement() {
       const res = await apiClient.patch(`/menu/items/${args.id}/availability`, { available: args.available });
       return res.data;
     },
-    onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['menu'] });
-      const item = items.find(i => i.id === variables.id);
-      if (item) {
-        showToast(`${item.name} is now ${variables.available ? 'available' : 'sold out'}`, variables.available ? 'success' : 'warning');
+    onMutate: async (args) => {
+      await queryClient.cancelQueries({ queryKey: ['menu'] });
+      const previousMenu = queryClient.getQueryData<any[]>(['menu']);
+      
+      queryClient.setQueryData<any[]>(['menu'], (old = []) => 
+        old.map(category => ({
+          ...category,
+          items: category.items?.map((item: any) => 
+            item.id === args.id ? { ...item, available: args.available } : item
+          )
+        }))
+      );
+      
+      return { previousMenu };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousMenu) {
+        queryClient.setQueryData(['menu'], context.previousMenu);
       }
+      showToast('Failed to update availability', 'error');
+    },
+    onSuccess: (_data, variables, context) => {
+      let itemName = 'Item';
+      if (context?.previousMenu) {
+        const match = context.previousMenu.flatMap((c: any) => c.items).find((i: any) => i.id === variables.id);
+        if (match) itemName = match.name;
+      }
+      showToast(`${itemName} is now ${variables.available ? 'available' : 'sold out'}`, variables.available ? 'success' : 'warning');
     }
   });
 
@@ -434,11 +456,32 @@ export default function MenuManagement() {
          await apiClient.patch(`/menu/items/${id}/availability`, { available: args.available });
       }
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['menu'] });
-      showToast(`${variables.ids.length} items marked as ${variables.available ? 'available' : 'sold out'}`, variables.available ? 'success' : 'warning');
+    onMutate: async (args) => {
+      await queryClient.cancelQueries({ queryKey: ['menu'] });
+      const previousMenu = queryClient.getQueryData<any[]>(['menu']);
+      
+      const idSet = new Set(args.ids);
+      queryClient.setQueryData<any[]>(['menu'], (old = []) => 
+        old.map(category => ({
+          ...category,
+          items: category.items?.map((item: any) => 
+            idSet.has(item.id) ? { ...item, available: args.available } : item
+          )
+        }))
+      );
+      
       setSelectedIds(new Set());
       setStatusTargetCount(null);
+      return { previousMenu };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousMenu) {
+        queryClient.setQueryData(['menu'], context.previousMenu);
+      }
+      showToast('Failed to update availability', 'error');
+    },
+    onSuccess: (_data, variables) => {
+      showToast(`${variables.ids.length} items marked as ${variables.available ? 'available' : 'sold out'}`, variables.available ? 'success' : 'warning');
     }
   });
 
@@ -766,22 +809,22 @@ export default function MenuManagement() {
           )}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="w-16 h-16 rounded-2xl bg-background-100 dark:bg-foreground-800 flex items-center justify-center mb-4">
-            <i className="ri-restaurant-2-line text-2xl text-foreground-400"></i>
+        <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-background-200 dark:border-foreground-800 rounded-2xl bg-white/50 dark:bg-foreground-900/50 mt-4">
+          <div className="w-24 h-24 mb-6 rounded-full bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center text-primary-500">
+            <i className="ri-restaurant-2-line text-4xl"></i>
           </div>
-          <h3 className="text-base font-semibold text-foreground-700 dark:text-foreground-300 font-heading">
+          <h3 className="text-xl font-bold font-heading text-foreground-900 dark:text-foreground-100 mb-2">
             No items found
           </h3>
-          <p className="text-sm text-foreground-400 mt-1 font-body">
-            {searchQuery ? 'Try adjusting your search or category filter.' : 'This category is empty. Add some items to get started!'}
+          <p className="text-foreground-500 max-w-md mb-8 font-body">
+            {searchQuery ? 'Try adjusting your search or category filter.' : 'This category is empty. Add some delicious menu items to get started!'}
           </p>
           {!searchQuery && (
             <button
               onClick={() => { setEditItem(null); setShowAddModal(true); }}
-              className="mt-4 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold transition-all cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-bold transition-all shadow-lg shadow-primary-500/20 hover:shadow-primary-500/40 hover:-translate-y-0.5"
             >
-              <i className="ri-add-line mr-1"></i> Add Item
+              <i className="ri-add-line text-lg"></i> Add New Item
             </button>
           )}
         </div>

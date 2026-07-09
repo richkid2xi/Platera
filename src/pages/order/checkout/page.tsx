@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useOrder } from '@/contexts/OrderContext';
+import { useCustomer } from '@/contexts/CustomerContext';
 import DesktopNav from '@/pages/order/components/DesktopNav';
 import { apiClient } from '@/api/client';
 
 export default function Checkout() {
   const { token } = useParams<{ token: string }>();
   const { cart: items, subtotal, serviceCharge, total, paymentMethod, dispatch, tableNumber } = useOrder();
+  const { restaurant } = useCustomer();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -29,7 +31,11 @@ export default function Checkout() {
         })),
       };
       
-      const response = await apiClient.post(`/public/order/${token}/orders`, orderPayload);
+      const response = await apiClient.post(`/public/order/${token}/orders`, orderPayload, {
+        headers: {
+          'Idempotency-Key': crypto.randomUUID()
+        }
+      });
       
       dispatch({ type: 'PLACE_ORDER', payload: { total, orderId: response.data.id } });
       navigate(`/order/${token}/order-status`);
@@ -71,6 +77,7 @@ export default function Checkout() {
               Select Payment Method
             </p>
             <div className="space-y-3">
+              {(restaurant?.paymentSettings?.momoEnabled !== false) && (
               <button
                 onClick={() => dispatch({ type: 'SET_PAYMENT_METHOD', payload: 'now' })}
                 className={`w-full p-5 rounded-2xl border transition-all duration-300 active:scale-[0.99] flex items-center gap-4 ${
@@ -108,7 +115,9 @@ export default function Checkout() {
                   )}
                 </div>
               </button>
+              )}
 
+              {restaurant?.paymentSettings?.cashEnabled !== false && (
               <button
                 onClick={() => dispatch({ type: 'SET_PAYMENT_METHOD', payload: 'cash' })}
                 className={`w-full p-5 rounded-2xl border transition-all duration-300 active:scale-[0.99] flex items-center gap-4 ${
@@ -146,6 +155,7 @@ export default function Checkout() {
                   )}
                 </div>
               </button>
+              )}
             </div>
           </div>
 

@@ -73,6 +73,8 @@ export default function SignIn() {
   const [statsVisible, setStatsVisible] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
 
+  const isEmailValid = email.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/dashboard";
 
   // Trigger count-up animation when the stats come into view
@@ -105,12 +107,27 @@ export default function SignIn() {
     e.preventDefault();
     setError(null);
     if (!email || !password) { setError("Please fill in all fields."); return; }
+    if (!isEmailValid) { setError("Please enter a valid email address."); return; }
     try {
       setIsLoading(true);
       await signIn(email, password);
       navigate(from, { replace: true });
     } catch (err: any) {
-      setError(err.response?.data?.error || "Invalid email or password.");
+      // Network / server unreachable
+      if (err.isNetworkError || err.code === 'ERR_NETWORK' || !err.response) {
+        setError("Cannot connect to the server. Please check your internet connection and try again.");
+        return;
+      }
+      const status = err.response?.status;
+      const code = err.response?.data?.code;
+      // Rate limit
+      if (status === 429) {
+        setError("Too many login attempts. Please wait a moment and try again.");
+      } else if (code === 'LOCKED') {
+        setError("This account has been locked due to too many failed attempts. Please contact support.");
+      } else {
+        setError(err.response?.data?.error || "Invalid email or password.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -235,9 +252,14 @@ export default function SignIn() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@platera.app"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 placeholder:text-foreground-400 dark:placeholder:text-foreground-600 focus:outline-none focus:ring-2 focus:ring-primary-400 dark:focus:ring-primary-500 focus:border-transparent transition-all text-sm"
+                  className={`w-full pl-10 pr-4 py-3 rounded-xl border ${!isEmailValid ? 'border-red-300 dark:border-red-700 focus:ring-red-400' : 'border-background-200 dark:border-foreground-700 focus:ring-primary-400 dark:focus:ring-primary-500'} bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 placeholder:text-foreground-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all text-sm`}
                 />
               </div>
+              {!isEmailValid && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <i className="ri-error-warning-line"></i> Please enter a valid email address.
+                </p>
+              )}
             </div>
 
             {/* Password */}
@@ -246,9 +268,9 @@ export default function SignIn() {
                 <label htmlFor="signin-password" className="block text-sm font-semibold text-foreground-700 dark:text-foreground-300">
                   Password
                 </label>
-                <a href="#" className="text-xs font-medium text-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                <Link to="/auth/forgot-password" className="text-xs font-medium text-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
                   Forgot password?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-400 dark:text-foreground-500">

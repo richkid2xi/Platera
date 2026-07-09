@@ -8,6 +8,7 @@ export interface JwtPayload {
   id: string;
   restaurantId: string;
   role: string;
+  name: string;
 }
 
 export const signToken = (payload: JwtPayload): string => {

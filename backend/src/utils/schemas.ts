@@ -75,6 +75,10 @@ export const createTableSchema = z.object({
   capacity: z.number().int().optional(),
 });
 
+export const updateTableSchema = z.object({
+  capacity: z.number().int().min(1).optional(),
+});
+
 // Orders
 export const createOrderSchema = z.object({
   customerName: z.string().optional(),
@@ -103,7 +107,7 @@ export const createInventoryItemSchema = z.object({
   unit: z.string().min(1),
   currentStock: z.number().min(0),
   lowStockThreshold: z.number().min(0),
-  supplier: z.string().optional(),
+  category: z.string().optional(),
 });
 
 export const updateInventoryItemSchema = createInventoryItemSchema.partial();

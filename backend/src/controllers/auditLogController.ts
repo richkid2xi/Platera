@@ -4,12 +4,16 @@ import prisma from '../utils/prisma';
 export const getAuditLogs = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const restaurantId = req.user!.restaurantId;
-    const { entityType, startDate, endDate } = req.query;
+    const { entityType, startDate, endDate, userId } = req.query;
 
     const whereClause: any = { restaurantId };
     
     if (entityType) {
       whereClause.entityType = entityType as string;
+    }
+
+    if (userId) {
+      whereClause.userId = userId as string;
     }
 
     if (startDate || endDate) {
@@ -20,6 +24,11 @@ export const getAuditLogs = async (req: Request, res: Response, next: NextFuncti
 
     const logs = await prisma.auditLog.findMany({
       where: whereClause,
+      include: {
+        user: {
+          select: { name: true, role: true }
+        }
+      },
       orderBy: { createdAt: 'desc' }
     });
 

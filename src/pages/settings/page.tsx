@@ -7,6 +7,10 @@ import { useRefresh } from '@/contexts/RefreshContext';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import SubscriptionBillingSection from './components/SubscriptionBillingSection';
 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/api/client';
+import { useAuth } from '@/contexts/AuthContext';
+
 const DEFAULT_SETTINGS = {
   profile: {
     name: 'Platera Restaurant',
@@ -57,16 +61,6 @@ const DEFAULT_SETTINGS = {
   },
 };
 
-const getSavedSettings = () => {
-  try {
-    const saved = localStorage.getItem('platera_settings');
-    if (saved) return JSON.parse(saved);
-  } catch (e) {
-    // Ignore error
-  }
-  return DEFAULT_SETTINGS;
-};
-
 const paymentProviders = [
   { id: 'momo', name: 'Mobile Money', icon: 'ri-smartphone-line', description: 'MTN, Telecel, AT' },
   { id: 'cash', name: 'Cash', icon: 'ri-money-dollar-circle-line', description: 'In-person cash payments' },
@@ -75,50 +69,84 @@ const paymentProviders = [
 type SettingTab = 'profile' | 'payments' | 'tax' | 'notifications' | 'appearance' | 'subscription';
 
 export default function Settings() {
-  const [restaurantSettings, setRestaurantSettings] = useState(getSavedSettings);
+  const { restaurant } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: fetchedSettings, isLoading } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const res = await apiClient.get('/settings');
+      return {
+        profile: { ...DEFAULT_SETTINGS.profile, ...res.data.profile },
+        paymentMethods: { ...DEFAULT_SETTINGS.paymentMethods, ...res.data.paymentMethods },
+        taxSettings: { ...DEFAULT_SETTINGS.taxSettings, ...res.data.taxSettings },
+        notifications: { ...DEFAULT_SETTINGS.notifications, ...res.data.notifications },
+        appearance: { ...DEFAULT_SETTINGS.appearance, ...res.data.appearance },
+      };
+    }
+  });
+
+  const [restaurantSettings, setRestaurantSettings] = useState(DEFAULT_SETTINGS);
+  const [profileState, setProfileState] = useState(DEFAULT_SETTINGS.profile);
+  const [paymentToggles, setPaymentToggles] = useState<Record<string, boolean>>({
+    cash: DEFAULT_SETTINGS.paymentMethods.cashEnabled,
+    momo: DEFAULT_SETTINGS.paymentMethods.momoEnabled,
+  });
+  const [momoProviderState, setMomoProviderState] = useState(DEFAULT_SETTINGS.paymentMethods.momoProvider);
+  const [momoNumberState, setMomoNumberState] = useState(DEFAULT_SETTINGS.paymentMethods.momoNumber);
+  const [taxState, setTaxState] = useState(DEFAULT_SETTINGS.taxSettings);
+  const [notificationToggles, setNotificationToggles] = useState<Record<string, boolean>>({
+    newOrderSound: DEFAULT_SETTINGS.notifications.newOrderSound,
+    newOrderNotify: DEFAULT_SETTINGS.notifications.newOrderNotify,
+    lowStockNotify: DEFAULT_SETTINGS.notifications.lowStockNotify,
+    negativeFeedbackNotify: DEFAULT_SETTINGS.notifications.negativeFeedbackNotify,
+    dailyReportEmail: DEFAULT_SETTINGS.notifications.dailyReportEmail,
+  });
+  const [primaryColorHex, setPrimaryColorHex] = useState(DEFAULT_SETTINGS.appearance.primaryColor);
+  const [currency, setCurrency] = useState(DEFAULT_SETTINGS.appearance.currency);
+  const [dateFormat, setDateFormat] = useState(DEFAULT_SETTINGS.appearance.dateFormat);
+  const [timeFormat, setTimeFormat] = useState(DEFAULT_SETTINGS.appearance.timeFormat);
+
+  useEffect(() => {
+    if (fetchedSettings) {
+      setRestaurantSettings(fetchedSettings);
+      setProfileState(fetchedSettings.profile);
+      setPaymentToggles({ cash: fetchedSettings.paymentMethods.cashEnabled, momo: fetchedSettings.paymentMethods.momoEnabled });
+      setMomoProviderState(fetchedSettings.paymentMethods.momoProvider);
+      setMomoNumberState(fetchedSettings.paymentMethods.momoNumber);
+      setTaxState(fetchedSettings.taxSettings);
+      setNotificationToggles({
+        newOrderSound: fetchedSettings.notifications.newOrderSound,
+        newOrderNotify: fetchedSettings.notifications.newOrderNotify,
+        lowStockNotify: fetchedSettings.notifications.lowStockNotify,
+        negativeFeedbackNotify: fetchedSettings.notifications.negativeFeedbackNotify,
+        dailyReportEmail: fetchedSettings.notifications.dailyReportEmail,
+      });
+      if (fetchedSettings.notifications.lowStockThreshold) setAlertThreshold(fetchedSettings.notifications.lowStockThreshold);
+      if (fetchedSettings.notifications.lowStockEmails) setAlertEmails(fetchedSettings.notifications.lowStockEmails);
+      setPrimaryColorHex(fetchedSettings.appearance.primaryColor);
+      setCurrency(fetchedSettings.appearance.currency);
+      setDateFormat(fetchedSettings.appearance.dateFormat);
+      setTimeFormat(fetchedSettings.appearance.timeFormat);
+    }
+  }, [fetchedSettings]);
 
   const { isRefreshing } = useRefresh();
   const { markStepComplete } = useOnboarding();
   const [activeTab, setActiveTab] = useState<SettingTab>('profile');
   const [toast, setToast] = useState('');
 
-  const [profileState, setProfileState] = useState(restaurantSettings.profile);
-
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const [logoImage, setLogoImage] = useState<string | null>(null);
+  const [logoImage, setLogoImage] = useState<string | null>(restaurant?.logoUrl || null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   // Low-stock email alert state
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(false);
-  const [alertEmails, setAlertEmails] = useState<string[]>(['manager@platera.app', 'kitchen@platera.app']);
   const [newEmail, setNewEmail] = useState('');
   const [alertFrequency, setAlertFrequency] = useState('immediate');
-  const [alertThreshold, setAlertThreshold] = useState(5);
+  const [alertThreshold, setAlertThreshold] = useState(DEFAULT_SETTINGS.notifications.lowStockThreshold || 5);
+  const [alertEmails, setAlertEmails] = useState<string[]>([]);
   const [alertCategories, setAlertCategories] = useState<string[]>(['Proteins', 'Produce', 'Dry Goods']);
   const [testEmailSent, setTestEmailSent] = useState(false);
-
-  const [paymentToggles, setPaymentToggles] = useState<Record<string, boolean>>({
-    cash: restaurantSettings.paymentMethods.cashEnabled,
-    momo: restaurantSettings.paymentMethods.momoEnabled,
-  });
-
-  const [momoProviderState, setMomoProviderState] = useState(restaurantSettings.paymentMethods.momoProvider);
-  const [momoNumberState, setMomoNumberState] = useState(restaurantSettings.paymentMethods.momoNumber);
-
-  const [taxState, setTaxState] = useState(restaurantSettings.taxSettings);
-
-  const [notificationToggles, setNotificationToggles] = useState<Record<string, boolean>>({
-    newOrderSound: restaurantSettings.notifications.newOrderSound,
-    newOrderNotify: restaurantSettings.notifications.newOrderNotify,
-    lowStockNotify: restaurantSettings.notifications.lowStockNotify,
-    negativeFeedbackNotify: restaurantSettings.notifications.negativeFeedbackNotify,
-    dailyReportEmail: restaurantSettings.notifications.dailyReportEmail,
-  });
-
-  // Display Settings State
-  const [primaryColorHex, setPrimaryColorHex] = useState(restaurantSettings.appearance.primaryColor);
-  const [currency, setCurrency] = useState(restaurantSettings.appearance.currency);
-  const [dateFormat, setDateFormat] = useState(restaurantSettings.appearance.dateFormat);
-  const [timeFormat, setTimeFormat] = useState(restaurantSettings.appearance.timeFormat);
 
   const { setUnsavedDiff, unsavedDiff, checkUnsaved } = useUnsavedChanges();
   const hasChanges = unsavedDiff.length > 0;
@@ -138,7 +166,7 @@ export default function Settings() {
     (Object.entries(profileState.openingHours) as [keyof typeof profileState.openingHours, { open: string; close: string }][]).forEach(([day, hours]) => {
       const orig = restaurantSettings.profile.openingHours[day];
       if (hours.open !== orig.open || hours.close !== orig.close) {
-        diffs.push(`Opening Hours for ${day} changed from <b>${orig.open}-${orig.close}</b> to <b>${hours.open}-${hours.close}</b>`);
+        diffs.push(`Opening Hours for ${String(day)} changed from <b>${orig.open}-${orig.close}</b> to <b>${hours.open}-${hours.close}</b>`);
       }
     });
 
@@ -173,7 +201,37 @@ export default function Settings() {
     });
 
     setUnsavedDiff(diffs);
-  }, [profileState, primaryColorHex, currency, dateFormat, timeFormat, paymentToggles, notificationToggles, setUnsavedDiff]);
+  }, [restaurantSettings, profileState, primaryColorHex, currency, dateFormat, timeFormat, paymentToggles, momoProviderState, momoNumberState, taxState, notificationToggles, setUnsavedDiff]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Set optimistic preview
+    setLogoImage(URL.createObjectURL(file));
+    setIsUploadingLogo(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      
+      const res = await apiClient.post('/settings/logo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      setToast('Logo uploaded successfully!');
+      setTimeout(() => setToast(''), 3000);
+      setLogoImage(res.data.logoUrl);
+      markStepComplete('upload_logo');
+    } catch (err) {
+      setToast('Failed to upload logo');
+      setTimeout(() => setToast(''), 3000);
+      // Revert to old logo on failure
+      setLogoImage(restaurant?.logoUrl || null);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
 
   const playTestSound = () => {
     try {
@@ -204,10 +262,37 @@ export default function Settings() {
     { key: 'subscription', label: 'Subscription', icon: 'ri-vip-crown-line' },
   ];
 
+  const updateMutation = useMutation({
+    mutationFn: async (newSettings: any) => {
+      const payload = {
+        profileSettings: newSettings.profile,
+        paymentSettings: newSettings.paymentMethods,
+        taxSettings: newSettings.taxSettings,
+        notificationSettings: newSettings.notifications,
+        appearanceSettings: newSettings.appearance
+      };
+      await apiClient.patch('/settings', payload);
+      return newSettings;
+    },
+    onSuccess: (newSettings) => {
+      setRestaurantSettings(newSettings);
+      queryClient.setQueryData(['settings'], newSettings);
+      setToast('Settings saved successfully!');
+      setTimeout(() => setToast(''), 3000);
+      setUnsavedDiff([]);
+      if (activeTab === 'profile') {
+        markStepComplete('upload_logo');
+      }
+    },
+    onError: () => {
+      setToast('Failed to save settings');
+      setTimeout(() => setToast(''), 3000);
+    }
+  });
+
   const handleSave = () => {
     if (!hasChanges) return;
     
-    // Save to localStorage
     const newSettings = {
       profile: profileState,
       paymentMethods: {
@@ -220,6 +305,8 @@ export default function Settings() {
       notifications: {
         ...restaurantSettings.notifications,
         ...notificationToggles,
+        lowStockThreshold: alertThreshold,
+        lowStockEmails: alertEmails
       },
       appearance: {
         primaryColor: primaryColorHex,
@@ -230,15 +317,7 @@ export default function Settings() {
       }
     };
     
-    localStorage.setItem('platera_settings', JSON.stringify(newSettings));
-    setRestaurantSettings(newSettings);
-    
-    setToast('Settings saved successfully!');
-    setTimeout(() => setToast(''), 3000);
-    setUnsavedDiff([]);
-    if (activeTab === 'profile') {
-      markStepComplete('upload_logo');
-    }
+    updateMutation.mutate(newSettings);
   };
 
   const handleSaveAlerts = () => {
@@ -269,7 +348,7 @@ export default function Settings() {
     setTimeout(() => { setToast(''); setTestEmailSent(false); }, 4000);
   };
 
-  if (isRefreshing) return <PageSkeleton />;
+  if (isRefreshing || isLoading) return <PageSkeleton />;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -325,16 +404,16 @@ export default function Settings() {
                     ref={logoInputRef}
                     className="hidden"
                     accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) setLogoImage(URL.createObjectURL(file));
-                    }}
+                    onChange={handleLogoUpload}
+                    disabled={isUploadingLogo}
                   />
                   <button
                     onClick={() => logoInputRef.current?.click()}
-                    className="mt-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-background-100 dark:bg-foreground-800 text-foreground-600 dark:text-foreground-300 hover:bg-background-200 transition-all cursor-pointer whitespace-nowrap font-body"
+                    disabled={isUploadingLogo}
+                    className={`mt-2 px-3 py-1.5 text-xs font-semibold rounded-lg text-foreground-600 dark:text-foreground-300 transition-all cursor-pointer whitespace-nowrap font-body ${isUploadingLogo ? 'bg-background-200 opacity-50 cursor-not-allowed' : 'bg-background-100 dark:bg-foreground-800 hover:bg-background-200'}`}
                   >
-                    <i className="ri-upload-2-line mr-1"></i>Upload Logo
+                    <i className={isUploadingLogo ? "ri-loader-4-line animate-spin mr-1 inline-block" : "ri-upload-2-line mr-1 inline-block"}></i>
+                    {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
                   </button>
                 </div>
               </div>
@@ -398,8 +477,8 @@ export default function Settings() {
                 <h4 className="text-sm font-bold text-foreground-900 dark:text-foreground-100 font-heading mb-3">Opening Hours</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(Object.entries(profileState.openingHours) as [keyof typeof profileState.openingHours, { open: string; close: string }][]).map(([day, hours]) => (
-                    <div key={day} className="flex items-center gap-3">
-                      <span className="text-xs font-semibold text-foreground-600 dark:text-foreground-300 w-20 capitalize font-body">{day}</span>
+                    <div key={String(day)} className="flex items-center gap-3">
+                      <span className="text-xs font-semibold text-foreground-600 dark:text-foreground-300 w-20 capitalize font-body">{String(day)}</span>
                       <input type="time" value={hours.open} onChange={(e) => setProfileState({ ...profileState, openingHours: { ...profileState.openingHours, [day]: { ...hours, open: e.target.value } } })} className="px-3 py-2 text-xs rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />
                       <span className="text-xs text-foreground-400 font-body">to</span>
                       <input type="time" value={hours.close} onChange={(e) => setProfileState({ ...profileState, openingHours: { ...profileState.openingHours, [day]: { ...hours, close: e.target.value } } })} className="px-3 py-2 text-xs rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body" />

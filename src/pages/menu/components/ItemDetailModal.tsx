@@ -4,7 +4,7 @@ import type { MenuItem } from '@/types/menu';
 interface ItemDetailModalProps {
   item: MenuItem;
   onClose: () => void;
-  onToggle: (id: number) => void;
+  onToggle: (id: string | number) => void;
   onEdit: (item: MenuItem) => void;
   onDelete: (item: MenuItem) => void;
 }
@@ -59,7 +59,7 @@ export default function ItemDetailModal({ item, onClose, onToggle, onEdit, onDel
                 {item.variants.map((v) => (
                   <div key={v.name} className="flex items-center justify-between py-1.5 border-b border-background-100 dark:border-foreground-800 last:border-b-0">
                     <span className="text-sm text-foreground-700 dark:text-foreground-300 font-body">{v.name}</span>
-                    <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading">GH₵ {v.price}</span>
+                    <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-heading">GH₵ {v.priceModifier}</span>
                   </div>
                 ))}
               </div>
@@ -99,7 +99,7 @@ export default function ItemDetailModal({ item, onClose, onToggle, onEdit, onDel
                 {item.available ? 'In Stock' : 'Sold Out'}
               </span>
               <button
-                onClick={() => onToggle(item.id)}
+                onClick={() => onToggle(item.id as string | number)}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${item.available ? 'bg-primary-500' : 'bg-foreground-300 dark:bg-foreground-600'}`}
               >
                 <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${item.available ? 'translate-x-5' : 'translate-x-0'}`} />

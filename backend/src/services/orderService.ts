@@ -26,7 +26,9 @@ export const createOrderInternal = async (
       });
 
       if (!menuItem || !menuItem.available || menuItem.restaurantId !== restaurantId) {
-        throw new Error(`Item ${item.menuItemId} is not available.`);
+        const err = new Error(`Item ${item.menuItemId} is not available.`);
+        (err as any).status = 400;
+        throw err;
       }
 
       let itemPrice = Number(menuItem.price);
@@ -88,8 +90,6 @@ export const createOrderInternal = async (
       }
     });
 
-    await deductInventoryForOrder(tx, newOrder.id, restaurantId);
-
     return newOrder;
-  });
+  }, { maxWait: 5000, timeout: 10000 });
 };

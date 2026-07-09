@@ -17,6 +17,7 @@ import AuditLog from "../pages/audit/page";
 import MyProfile from "../pages/profile/page";
 import SignIn from "../pages/auth/SignIn";
 import SignUp from "../pages/auth/SignUp";
+import ForgotPassword from "../pages/auth/ForgotPassword";
 import Terms from "../pages/legal/Terms";
 import Privacy from "../pages/legal/Privacy";
 import CustomerLayout from "../pages/order/layout";
@@ -27,11 +28,14 @@ import CustomerPayment from "../pages/order/payment/page";
 import CustomerOrderStatus from "../pages/order/order-status/page";
 import CustomerFeedback from "../pages/order/feedback/page";
 
+import ManualOrder from "../pages/manual-order/page";
+
 const routes: RouteObject[] = [
   // ── Public auth / legal routes ──
   { path: "/", element: <SignIn /> },
-  { path: "/sign-in", element: <SignIn /> },
-  { path: "/sign-up", element: <SignUp /> },
+  { path: "/auth/signin", element: <SignIn /> },
+  { path: "/auth/signup", element: <SignUp /> },
+  { path: "/auth/forgot-password", element: <ForgotPassword /> },
   { path: "/terms", element: <Terms /> },
   { path: "/privacy", element: <Privacy /> },
   {
@@ -57,6 +61,7 @@ const routes: RouteObject[] = [
         children: [
           { path: "/dashboard", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/dashboard']}><Dashboard /></ProtectedRoute> },
           { path: "/orders", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/orders']}><LiveOrders /></ProtectedRoute> },
+          { path: "/manual-order", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/manual-order']}><ManualOrder /></ProtectedRoute> },
           { path: "/menu", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/menu']}><MenuManagement /></ProtectedRoute> },
           { path: "/tables", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/tables']}><Tables /></ProtectedRoute> },
           { path: "/inventory", element: <ProtectedRoute allowedRoles={NAV_PERMISSIONS['/inventory']}><Inventory /></ProtectedRoute> },

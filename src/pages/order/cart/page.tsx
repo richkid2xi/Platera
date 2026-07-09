@@ -174,7 +174,7 @@ export default function Cart() {
                           className="w-full bg-background-50 border border-background-200 rounded-xl px-3 py-2 font-body text-sm text-foreground-800 placeholder:text-foreground-400 resize-none focus:outline-none focus:border-primary-400 hover:border-background-300 transition-all duration-200"
                         />
                         <p className="font-body text-[10px] text-foreground-400 text-right mt-0.5">
-                          {item.specialInstructions.length}/150
+                          {item.specialInstructions?.length || 0}/150
                         </p>
                       </div>
                     )}

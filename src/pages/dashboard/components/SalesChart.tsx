@@ -40,7 +40,7 @@ export default function SalesChart({ data }: { data?: any[] }) {
               <Tooltip 
                 cursor={{ fill: 'rgba(241, 245, 249, 0.5)' }}
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                formatter={(value: number) => [view === 'revenue' ? `GH₵ ${value.toFixed(2)}` : value, view === 'revenue' ? 'Revenue' : 'Orders']}
+                formatter={(value: any) => [view === 'revenue' ? `GH₵ ${Number(value).toFixed(2)}` : value, view === 'revenue' ? 'Revenue' : 'Orders']}
               />
               <Bar 
                 dataKey={view} 

@@ -44,7 +44,7 @@ export default function Layout() {
         }`}
       >
         <div className="p-4 md:p-6">
-          <div key={location.pathname} className="animate-fade-in">
+          <div className="animate-fade-in">
             <Outlet />
           </div>
         </div>

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import BottomNav from '@/pages/order/components/BottomNav';
 import DesktopNav from '@/pages/order/components/DesktopNav';
 import { useOrder } from '@/contexts/OrderContext';
+import { apiClient } from '@/api/client';
 
 interface RatedItem {
   name: string;
@@ -50,12 +51,22 @@ export default function Feedback() {
     setFormError('');
 
     try {
-      // Simulate a short network delay, then treat as success.
-      // Replace with a real API endpoint when the backend is ready.
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      if (currentOrder) {
+        const itemRatings = ratedItems.map((item, idx) => ({
+          menuItemId: currentOrder.items[idx].menuItemId,
+          thumbsUp: item.liked
+        })).filter(item => item.thumbsUp !== null);
+
+        await apiClient.post(`/public/order/${token}/orders/${currentOrder.id}/feedback`, {
+          overallRating,
+          comment: comment.trim() || undefined,
+          itemRatings: itemRatings.length > 0 ? itemRatings : undefined
+        });
+      }
+
       dispatch({ type: 'SUBMIT_FEEDBACK' });
-    } catch {
-      setFormError('Network error. Please check your connection and try again.');
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || 'Network error. Please check your connection and try again.');
     } finally {
       setSubmitting(false);
     }

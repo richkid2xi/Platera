@@ -76,7 +76,7 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
   
   // 1. New orders
   const newOrders = orders.filter(o => o.status === 'NEW');
-  newOrders.forEach((order, index) => {
+  newOrders.forEach((order) => {
     dynamicNotifications.push({
       id: `order-${order.id}`,
       type: 'order',
@@ -213,7 +213,7 @@ export default function TopBar({ sidebarCollapsed, onMobileMenuToggle }: TopBarP
             </div>
             <div className="hidden md:flex flex-col items-start">
               <span className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body">{user?.name ?? 'User'}</span>
-              <span className="text-xs text-foreground-400 font-body capitalize">{user?.staffRole ?? user?.role ?? 'Staff'}</span>
+              <span className="text-xs text-foreground-400 font-body capitalize">{user?.role ?? 'Staff'}</span>
             </div>
             <i className="ri-arrow-down-s-line text-foreground-400 text-sm hidden md:block"></i>
           </button>

@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import prisma from '../utils/prisma';
 import { createStaffSchema, updateStaffStatusSchema } from '../utils/schemas';
 import { Role } from '@prisma/client';
+import { logAction } from '../utils/auditLogger';
 
 export const createStaff = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -44,6 +45,14 @@ export const createStaff = async (req: Request, res: Response, next: NextFunctio
       }
     });
 
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Created — Staff '${newUser.name}' by ${req.user!.name}`,
+      entityType: 'Staff',
+      entityId: newUser.id
+    });
+
     res.status(201).json(newUser);
   } catch (error) {
     next(error);
@@ -69,7 +78,15 @@ export const updateStaffStatus = async (req: Request, res: Response, next: NextF
     const updatedStaff = await prisma.user.update({
       where: { id: staffId },
       data: { status: data.status },
-      select: { id: true, status: true, role: true }
+      select: { id: true, name: true, status: true, role: true }
+    });
+
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Status changed to ${data.status} — Staff '${updatedStaff.name}' by ${req.user!.name}`,
+      entityType: 'Staff',
+      entityId: updatedStaff.id
     });
 
     res.json(updatedStaff);
@@ -91,7 +108,7 @@ export const getStaff = async (req: Request, res: Response, next: NextFunction):
         role: true,
         status: true,
         createdAt: true,
-        lastLoginAt: true,
+        updatedAt: true
       }
     });
 
@@ -127,11 +144,20 @@ export const deleteStaff = async (req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    await prisma.user.delete({
-      where: { id: staffId }
+    await prisma.user.update({
+      where: { id: staffId },
+      data: { status: 'INACTIVE' }
     });
 
-    res.json({ message: 'Deleted successfully' });
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Deactivated — Staff '${staff.name}' by ${req.user!.name}`,
+      entityType: 'Staff',
+      entityId: staff.id
+    });
+
+    res.json({ message: 'Staff deactivated successfully' });
   } catch (error) {
     next(error);
   }

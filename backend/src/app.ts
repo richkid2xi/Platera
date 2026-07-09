@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import * as Sentry from '@sentry/node';
@@ -22,12 +24,15 @@ import subscriptionRoutes from './routes/subscriptionRoutes';
 import reconciliationRoutes from './routes/reconciliationRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import reportsRoutes from './routes/reportsRoutes';
-// Global Rate Limiter
+import settingsRoutes from './routes/settingsRoutes';
+import userRoutes from './routes/userRoutes';
+// Global Rate Limiter — tuned for multi-staff restaurant environment
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500, // 500 req/15min per IP — allows multiple staff on the same network
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.', code: 'RATE_LIMIT_EXCEEDED' },
 });
 
 // Stricter limiter for public order paths
@@ -46,8 +51,32 @@ app.use((req, res, next) => {
 
 app.use(pinoHttp({
   genReqId: (req: any) => req.id,
+  redact: {
+    paths: [
+      'req.headers.cookie',
+      'req.headers.authorization',
+      'res.headers["set-cookie"]',
+      'req.body.password',
+      'req.body.token'
+    ],
+    censor: '[Redacted]',
+  },
+  serializers: {
+    req: (req) => ({
+      id: req.id,
+      method: req.method,
+      url: req.url,
+      headers: {
+        host: req.headers.host,
+        'user-agent': req.headers['user-agent']
+      }
+    }),
+    res: (res) => ({
+      statusCode: res.statusCode,
+    })
+  },
   ...(env.NODE_ENV !== 'production' && {
-    transport: { target: 'pino-pretty', options: { colorize: true } }
+    transport: { target: 'pino-pretty', options: { colorize: true, sync: false } }
   })
 }));
 
@@ -107,7 +136,22 @@ app.use('/api/v1/subscription', subscriptionRoutes);
 app.use('/api/v1/reconciliation', reconciliationRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/reports', reportsRoutes);
+app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/public', publicRoutes);
+app.use('/api/v1/users', userRoutes);
+
+// System Logs Endpoint
+app.post('/api/v1/system/logs', (req, res) => {
+  const logPath = path.join(process.cwd(), 'logs');
+  if (!fs.existsSync(logPath)) {
+    fs.mkdirSync(logPath, { recursive: true });
+  }
+  const errorMsg = `[FRONTEND ERROR] [${new Date().toISOString()}] ${JSON.stringify(req.body)}\n`;
+  fs.appendFileSync(path.join(logPath, 'error.log'), errorMsg);
+  res.status(200).json({ success: true });
+});
+
+import { ZodError } from 'zod';
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -123,13 +167,39 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     Sentry.captureException(err);
   });
 
-  const statusCode = err.status || 500;
-  const message = err.message || 'Internal Server Error';
+  let statusCode = err.status || 500;
+  let message = err.message || 'Internal Server Error';
+  let errors = undefined;
+
+  // Handle Zod Validation Errors gracefully
+  if (err instanceof ZodError) {
+    statusCode = 400;
+    message = 'Validation failed';
+    errors = err.issues;
+  } else if (err.message === 'INSUFFICIENT_STOCK') {
+    statusCode = 400;
+    message = 'Not enough stock available for this operation.';
+    err.code = 'INSUFFICIENT_STOCK';
+  }
+
+  // Log full errors to the server output so we can trace 500s locally/in logs
+  if (statusCode >= 400) {
+    req.log.error({ err, stack: err.stack }, message);
+    
+    // Also append to global error.log
+    const logPath = path.join(process.cwd(), 'logs');
+    if (!fs.existsSync(logPath)) {
+      fs.mkdirSync(logPath, { recursive: true });
+    }
+    const errorMsg = `[BACKEND ERROR] [${new Date().toISOString()}] ${req.method} ${req.originalUrl} - ${statusCode} - ${message} - ${err.stack || JSON.stringify(errors)}\n`;
+    fs.appendFileSync(path.join(logPath, 'error.log'), errorMsg);
+  }
 
   // Do not leak stack traces in production
   res.status(statusCode).json({
     error: message,
-    code: err.code || 'INTERNAL_ERROR',
+    code: err.code || (statusCode === 400 ? 'VALIDATION_ERROR' : 'INTERNAL_ERROR'),
+    ...(errors && { details: errors }),
     ...(env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });

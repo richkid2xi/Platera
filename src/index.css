@@ -360,3 +360,24 @@ input[type="number"]::-webkit-outer-spin-button:hover {
   scrollbar-width: none !important;
 }
 
+/* Custom internal scrollbar for cards */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-background-200);
+  border-radius: 10px;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-foreground-700);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-background-300);
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-foreground-600);
+}

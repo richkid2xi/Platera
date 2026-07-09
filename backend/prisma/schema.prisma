@@ -80,6 +80,12 @@ model Restaurant {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
+  profileSettings      Json?
+  paymentSettings      Json?
+  taxSettings          Json?
+  notificationSettings Json?
+  appearanceSettings   Json?
+
   users               User[]
   tables              Table[]
   menuCategories      MenuCategory[]
@@ -102,10 +108,26 @@ model User {
   role         Role
   status       Status
   failedLoginAttempts Int @default(0)
+  avatarUrl    String?
+  resetToken   String?
+  resetTokenExpiry DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  auditLogs    AuditLog[]
+  activityLogs UserActivityLog[]
+}
+
+model UserActivityLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  action    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Table {
@@ -113,7 +135,8 @@ model Table {
   restaurantId String       @db.Uuid
   tableNumber  String
   capacity     Int?
-  qrCodeUrl    String
+  qrCodeUrl    String?
+  status       Status       @default(ACTIVE)
   createdAt    DateTime     @default(now())
 
   restaurant   Restaurant   @relation(fields: [restaurantId], references: [id])
@@ -249,7 +272,7 @@ model InventoryItem {
   unit              String
   currentStock      Decimal    @db.Decimal(10, 2)
   lowStockThreshold Decimal    @db.Decimal(10, 2)
-  supplier          String?
+  category          String?
   lastRestockedAt   DateTime?
 
   restaurant        Restaurant @relation(fields: [restaurantId], references: [id])
@@ -318,6 +341,7 @@ model AuditLog {
   createdAt    DateTime   @default(now())
 
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
 
   @@index([restaurantId])
   @@index([restaurantId, createdAt])

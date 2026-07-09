@@ -1,17 +1,34 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../utils/prisma';
 import { updateOrderStatusSchema, cancelOrderSchema, createOrderSchema } from '../utils/schemas';
+import { logAction } from '../utils/auditLogger';
 import { OrderStatus, Role, OrderSource, PaymentStatus } from '@prisma/client';
 import { emitToRestaurant, emitToOrder } from '../websocket/socket';
 import { createOrderInternal } from '../services/orderService';
+import { deductInventoryForOrder } from '../services/inventoryService';
 
 export const getOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const restaurantId = req.user!.restaurantId;
-    const { status, tableId } = req.query;
+    const { status, tableId, from } = req.query;
 
-    const whereClause: any = { restaurantId };
-    if (status) whereClause.status = status;
+    // Default to last 7 days to avoid unbounded queries; override via ?from=
+    const defaultFrom = new Date();
+    defaultFrom.setDate(defaultFrom.getDate() - 7);
+    defaultFrom.setHours(0, 0, 0, 0);
+    const fromDate = from ? new Date(from as string) : defaultFrom;
+
+    const whereClause: any = {
+      restaurantId,
+      createdAt: { gte: fromDate },
+    };
+    
+    if (status === 'ACTIVE') {
+      whereClause.status = { notIn: ['SERVED', 'CANCELLED'] };
+    } else if (status) {
+      whereClause.status = status;
+    }
+    
     if (tableId) whereClause.tableId = tableId;
 
     const orders = await prisma.order.findMany({
@@ -99,38 +116,38 @@ export const updateOrderStatus = async (req: Request, res: Response, next: NextF
       return;
     }
 
-    const updatedOrder = await prisma.$transaction(async (tx) => {
-      const updatedCount = await tx.order.updateMany({
-        where: { id, status: order.status },
-        data: { status: data.status }
-      });
-
-      if (updatedCount.count === 0) {
-        res.status(409).json({ error: 'Order status was modified by another request. Please refresh.', code: 'CONFLICT' });
-        throw new Error('Optimistic lock failed on order status update');
-      }
-
-      const updated = await tx.order.findUnique({ where: { id } });
-      if (!updated) throw new Error('Order not found after update');
-
-      await tx.auditLog.create({
-        data: {
-          restaurantId,
-          userId,
-          action: `Order ORD-${id} marked as ${data.status} by ${userName}`,
-          entityType: 'ORDER',
-          entityId: id
-        }
-      });
-
-      return updated;
+    const updatedCount = await prisma.order.updateMany({
+      where: { id, status: order.status },
+      data: { status: data.status }
     });
 
-    // Emit websocket events
+    if (updatedCount.count === 0) {
+      res.status(409).json({ error: 'Order status was modified by another request. Please refresh.', code: 'CONFLICT' });
+      return;
+    }
+
+    const updatedOrder = await prisma.order.findUnique({ where: { id } });
+    if (!updatedOrder) {
+      res.status(404).json({ error: 'Order not found after update' });
+      return;
+    }
+
+    // Emit websocket events IMMEDIATELY
     emitToRestaurant(restaurantId, 'order:status_updated', updatedOrder);
     emitToOrder(id, 'order:status_updated', updatedOrder);
 
     res.json(updatedOrder);
+
+    // Asynchronous audit log
+    prisma.auditLog.create({
+      data: {
+        restaurantId,
+        userId,
+        action: `Order ORD-${id} marked as ${data.status} by ${userName}`,
+        entityType: 'ORDER',
+        entityId: id
+      }
+    }).catch(err => console.error('Failed to write audit log:', err));
   } catch (error) {
     next(error);
   }
@@ -177,14 +194,11 @@ export const cancelOrder = async (req: Request, res: Response, next: NextFunctio
         data: {
           restaurantId,
           userId,
-          action: `Order ORD-${id} CANCELLED by ${userName}. Reason: ${data.reason}`,
-          entityType: 'ORDER',
+          action: `Cancelled — Order '${id}' by ${userName}`,
+          entityType: 'Order',
           entityId: id
         }
       });
-
-      // Optionally, here we might return inventory stock back if it was already deducted.
-      // But the prompt does not specify returning stock on cancellation, so we will skip it unless instructed.
 
       return updated;
     });
@@ -228,7 +242,13 @@ export const createManualOrder = async (req: Request, res: Response, next: NextF
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const name = user?.name || 'Staff';
 
-    await prisma.auditLog.create({
+    emitToRestaurant(restaurantId, 'order:new', order);
+    res.status(201).json(order);
+
+    // Secondary operations asynchronously
+    deductInventoryForOrder(prisma, order.id, restaurantId).catch((err) => console.error('Inventory deduct err:', err));
+
+    prisma.auditLog.create({
       data: {
         restaurantId,
         userId,
@@ -236,10 +256,15 @@ export const createManualOrder = async (req: Request, res: Response, next: NextF
         entityType: 'ORDER',
         entityId: order.id
       }
-    });
+    }).catch((err) => console.error('Audit log err:', err));
 
-    emitToRestaurant(restaurantId, 'order:new', order);
-    res.status(201).json(order);
+    logAction({
+      restaurantId,
+      userId,
+      action: `Manually Created — Order '${order.id}' by ${name}`,
+      entityType: 'Order',
+      entityId: order.id
+    }).catch((err) => console.error('Log action err:', err));
   } catch (error) {
     next(error);
   }

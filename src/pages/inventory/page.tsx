@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import { useUnsavedChanges } from '@/contexts/UnsavedChangesContext';
 import PageHeader from '@/components/base/PageHeader';
@@ -14,23 +15,22 @@ interface InventoryItem {
   unit: string;
   currentStock: number | string;
   lowStockThreshold: number | string;
-  supplier?: string;
+  category?: string;
   lastRestockedAt?: string;
 }
 
 export default function Inventory() {
   const { user } = useAuth();
   const { isRefreshing } = useRefresh();
+  const queryClient = useQueryClient();
   const isStaff = user?.role === 'STAFF';
 
   const [search, setSearch] = useState('');
-  const [supplierFilter, setSupplierFilter] = useState('All Suppliers');
+  const [categoryFilter, setCategoryFilter] = useState('All Categories');
   const [showRestock, setShowRestock] = useState<string | null>(null);
   const [restockAmount, setRestockAmount] = useState('');
   const [showSell, setShowSell] = useState<string | null>(null);
   const [sellAmount, setSellAmount] = useState('');
-  const [items, setItems] = useState<InventoryItem[]>([]);
-  const [salesLog, setSalesLog] = useState<any[]>([]);
   const [toast, setToast] = useState('');
   const [toastType, setToastType] = useState<'success' | 'warning'>('success');
 
@@ -44,37 +44,42 @@ export default function Inventory() {
     unit: 'pcs',
     currentStock: 0,
     lowStockThreshold: 10,
-    supplier: '',
+    category: '',
   });
 
-  const fetchInventory = async () => {
-    try {
-      const [invRes, logRes] = await Promise.all([
-        apiClient.get('/inventory'),
-        apiClient.get('/inventory/logs')
-      ]);
-      setItems(invRes.data);
-      setSalesLog(logRes.data.map((log: any) => {
-        const d = new Date(log.createdAt);
-        return {
-          id: log.id,
-          itemName: log.inventoryItem.name,
-          category: log.inventoryItem.supplier || 'N/A',
-          qty: Math.abs(log.changeAmount),
-          unitPrice: 0,
-          total: 0,
-          date: d.toLocaleDateString(),
-          time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-      }));
-    } catch (error) {
-      console.error(error);
+  const { data: invData, isLoading: invLoading, refetch: fetchInventory } = useQuery({
+    queryKey: ['inventory', 'all'],
+    queryFn: async () => {
+      const res = await apiClient.get('/inventory');
+      return res.data;
     }
-  };
+  });
 
-  useEffect(() => {
-    fetchInventory();
-  }, [isRefreshing]);
+  const { data: logsData, isLoading: logsLoading } = useQuery({
+    queryKey: ['inventory', 'logs'],
+    queryFn: async () => {
+      const res = await apiClient.get('/inventory/logs');
+      return res.data;
+    }
+  });
+
+  const items: InventoryItem[] = invData || [];
+  
+  const salesLog = (logsData || []).map((log: any) => {
+    const d = new Date(log.createdAt);
+    return {
+      id: log.id,
+      itemName: log.inventoryItem.name,
+      category: log.inventoryItem.category || 'N/A',
+      qty: Math.abs(log.changeAmount),
+      unitPrice: 0,
+      total: 0,
+      date: d.toLocaleDateString(),
+      time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+  });
+
+  const isLoading = isRefreshing || invLoading || logsLoading;
 
   const { setUnsavedDiff, checkUnsaved, unsavedDiff } = useUnsavedChanges();
 
@@ -102,14 +107,14 @@ export default function Inventory() {
     });
   };
 
-  const supplierOptions = [
-    'All Suppliers',
-    ...Array.from(new Set(items.map((item) => item.supplier).filter((supplier): supplier is string => Boolean(supplier)))),
+  const categoryOptions = [
+    'All Categories',
+    ...Array.from(new Set(items.map((item) => item.category).filter((cat): cat is string => Boolean(cat)))),
   ];
   const filtered = items.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
-    const matchesSupplier = supplierFilter === 'All Suppliers' || item.supplier === supplierFilter;
-    return matchesSearch && matchesSupplier;
+    const matchesCategory = categoryFilter === 'All Categories' || item.category === categoryFilter;
+    return matchesSearch && matchesCategory;
   });
 
   const openAddModal = () => {
@@ -119,7 +124,7 @@ export default function Inventory() {
       unit: 'pcs',
       currentStock: 0,
       lowStockThreshold: 10,
-      supplier: '',
+      category: '',
     });
     setShowItemModal(true);
   };
@@ -131,7 +136,7 @@ export default function Inventory() {
       unit: item.unit,
       currentStock: Number(item.currentStock),
       lowStockThreshold: Number(item.lowStockThreshold),
-      supplier: item.supplier || '',
+      category: item.category || '',
     });
     setShowItemModal(true);
   };
@@ -167,13 +172,18 @@ export default function Inventory() {
   };
 
   const deleteItem = async (id: string) => {
+    const previousInventory = queryClient.getQueryData(['inventory', 'all']);
+    queryClient.setQueryData(['inventory', 'all'], (old: any) =>
+      old ? old.filter((item: any) => item.id !== id) : old
+    );
+
     try {
       await apiClient.delete(`/inventory/${id}`);
-      await fetchInventory();
       setToast('Item deleted successfully');
       setToastType('success');
       setTimeout(() => setToast(''), 3000);
     } catch (err: any) {
+      queryClient.setQueryData(['inventory', 'all'], previousInventory);
       setToast(err.response?.data?.error || 'Failed to delete item');
       setToastType('warning');
       setTimeout(() => setToast(''), 3000);
@@ -182,7 +192,7 @@ export default function Inventory() {
 
   const handleRestock = async (id: string) => {
     if (isStaff) return; // Prevent restock for staff
-    const amount = parseInt(restockAmount);
+    const amount = Number(restockAmount);
     if (!amount || amount <= 0) return;
 
     try {
@@ -204,7 +214,7 @@ export default function Inventory() {
   };
 
   const handleSell = async (id: string) => {
-    const qty = parseInt(sellAmount);
+    const qty = Number(sellAmount);
     if (!qty || qty <= 0) return;
     const item = items.find((i) => i.id === id);
     if (!item) return;
@@ -244,7 +254,7 @@ export default function Inventory() {
   const totalSalesToday = 0; // Removing sales aggregation from inventory side, rely on dashboard or reports
 
 
-  if (isRefreshing) return <PageSkeleton />;
+  if (isLoading) return <PageSkeleton />;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -303,11 +313,13 @@ export default function Inventory() {
             className="w-full pl-9 pr-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 placeholder:text-foreground-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 font-body transition-all"
           />
         </div>
-        <div className="w-full sm:w-48">
+        <div className="w-full sm:w-64 z-10">
           <CustomSelect
-            value={supplierFilter}
-            onChange={(val) => setSupplierFilter(val)}
-            options={supplierOptions.map(supplier => ({ label: supplier, value: supplier }))}
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            options={categoryOptions.map(cat => ({ label: cat, value: cat }))}
+            placeholder="All Categories"
+            className="w-full text-sm font-medium"
           />
         </div>
       </div>
@@ -349,9 +361,9 @@ export default function Inventory() {
                     </div>
                   </div>
 
-                  {/* Supplier (Replacing Category) */}
+                  {/* Category */}
                   <div className="md:col-span-2 hidden md:block">
-                    <span className="text-sm text-foreground-600 dark:text-foreground-300 font-body">{item.supplier || '-'}</span>
+                    <span className="text-sm text-foreground-600 dark:text-foreground-300 font-body">{item.category || '-'}</span>
                   </div>
 
                   {/* Stock Level */}
@@ -440,6 +452,11 @@ export default function Inventory() {
                               className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 text-foreground-900 dark:text-foreground-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 font-body"
                               placeholder={`Max: ${Number(item.currentStock)} units`}
                             />
+                            {Number(sellAmount) > 0 && (
+                              <div className="mt-2 text-xs font-medium text-foreground-500 bg-background-50 dark:bg-foreground-800/50 p-2 rounded border border-background-200 dark:border-foreground-800">
+                                Resulting Stock: <span className="font-bold text-foreground-900 dark:text-foreground-100">{Math.max(0, Number(item.currentStock) - Number(sellAmount))} {item.unit}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex gap-3">
@@ -509,7 +526,7 @@ export default function Inventory() {
               <p className="text-xs mt-0.5 font-body">Sales will appear here when you record them</p>
             </div>
           ) : (
-            salesLog.map((sale) => (
+            salesLog.map((sale: any) => (
               <div key={sale.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-3 px-5 py-3 items-center hover:bg-background-50 dark:hover:bg-foreground-800/50 transition-colors">
                 <div className="md:col-span-3">
                   <p className="text-sm font-semibold text-foreground-900 dark:text-foreground-100 font-body truncate">{sale.itemName}</p>
@@ -576,13 +593,13 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Supplier (Optional)</label>
+                  <label className="block text-xs font-semibold text-foreground-600 dark:text-foreground-300 mb-1.5 font-body">Category (Optional)</label>
                   <input
                     type="text"
-                    value={formData.supplier}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full px-4 py-2.5 text-sm rounded-lg border border-background-200 dark:border-foreground-800 bg-white dark:bg-foreground-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
-                    placeholder="Supplier name"
+                    placeholder="Category name"
                   />
                 </div>
               </div>

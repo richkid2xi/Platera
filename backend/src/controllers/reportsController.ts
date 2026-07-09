@@ -19,22 +19,55 @@ export const getReports = async (req: Request, res: Response, next: NextFunction
       startDate.setDate(now.getDate() - 7);
     }
 
-    const orders = await prisma.order.findMany({
-      where: {
-        restaurantId,
-        createdAt: { gte: startDate },
-        status: { not: OrderStatus.CANCELLED }
-      },
-      include: {
-        table: true,
-        items: { include: { menuItem: { include: { category: true } } } }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const prevStartDate = new Date(startDate);
+    if (period === 'month') {
+      prevStartDate.setMonth(prevStartDate.getMonth() - 1);
+    } else if (period === 'year') {
+      prevStartDate.setFullYear(prevStartDate.getFullYear() - 1);
+    } else {
+      prevStartDate.setDate(prevStartDate.getDate() - 7);
+    }
+
+    const [orders, prevOrders] = await Promise.all([
+      prisma.order.findMany({
+        where: {
+          restaurantId,
+          createdAt: { gte: startDate },
+          status: { not: OrderStatus.CANCELLED }
+        },
+        include: {
+          table: true,
+          items: { include: { menuItem: { include: { category: true } } } }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.order.findMany({
+        where: {
+          restaurantId,
+          createdAt: { gte: prevStartDate, lt: startDate },
+          status: { not: OrderStatus.CANCELLED }
+        }
+      })
+    ]);
 
     const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
     const totalOrders = orders.length;
     const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : '0.00';
+
+    const prevTotalRevenue = prevOrders.reduce((sum, o) => sum + Number(o.total), 0);
+    const prevTotalOrders = prevOrders.length;
+    const prevAvgOrderValue = prevTotalOrders > 0 ? (prevTotalRevenue / prevTotalOrders) : 0;
+
+    const calculateTrend = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? '+100%' : '0%';
+      const diff = current - previous;
+      const pct = Math.round((diff / previous) * 100);
+      return pct > 0 ? `+${pct}%` : `${pct}%`;
+    };
+
+    const revenueChange = calculateTrend(totalRevenue, prevTotalRevenue);
+    const ordersChange = calculateTrend(totalOrders, prevTotalOrders);
+    const avgChange = calculateTrend(Number(avgOrderValue), prevAvgOrderValue);
 
     // Daily trends
     const dailyMap: Record<string, { revenue: number; orders: number }> = {};
@@ -136,11 +169,11 @@ export const getReports = async (req: Request, res: Response, next: NextFunction
     res.json({
       summary: {
         totalRevenue: `GH₵ ${totalRevenue.toLocaleString()}`,
-        revenueChange: '+0%',
+        revenueChange,
         totalOrders,
-        ordersChange: '+0%',
+        ordersChange,
         avgOrderValue: `GH₵ ${avgOrderValue}`,
-        avgChange: '+0%',
+        avgChange,
         topCategory,
         topCategoryShare
       },

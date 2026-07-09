@@ -33,15 +33,29 @@ export const createInventoryItem = async (req: Request, res: Response, next: Nex
     const restaurantId = req.user!.restaurantId;
     const data = createInventoryItemSchema.parse(req.body);
 
-    const item = await prisma.inventoryItem.create({
-      data: {
-        restaurantId,
-        name: data.name,
-        unit: data.unit,
-        currentStock: data.currentStock,
-        lowStockThreshold: data.lowStockThreshold,
-        supplier: data.supplier
-      }
+    const item = await prisma.$transaction(async (tx) => {
+      const createdItem = await tx.inventoryItem.create({
+        data: {
+          restaurantId,
+          name: data.name,
+          unit: data.unit,
+          currentStock: data.currentStock,
+          lowStockThreshold: data.lowStockThreshold,
+          category: data.category
+        }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          restaurantId,
+          userId: req.user!.id,
+          action: `Created — Inventory Item '${data.name}' by ${req.user!.name}`,
+          entityType: 'INVENTORY_ITEM',
+          entityId: createdItem.id
+        }
+      });
+
+      return createdItem;
     });
 
     res.status(201).json(item);
@@ -62,9 +76,23 @@ export const updateInventoryItem = async (req: Request, res: Response, next: Nex
       return;
     }
 
-    const updated = await prisma.inventoryItem.update({
-      where: { id },
-      data
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedItem = await tx.inventoryItem.update({
+        where: { id },
+        data
+      });
+
+      await tx.auditLog.create({
+        data: {
+          restaurantId,
+          userId: req.user!.id,
+          action: `Edited — Inventory Item '${existing.name}' by ${req.user!.name}`,
+          entityType: 'INVENTORY_ITEM',
+          entityId: id
+        }
+      });
+
+      return updatedItem;
     });
 
     res.json(updated);
@@ -88,6 +116,16 @@ export const deleteInventoryItem = async (req: Request, res: Response, next: Nex
       await tx.menuItemInventoryLink.deleteMany({ where: { inventoryItemId: id } });
       await tx.inventoryLog.deleteMany({ where: { inventoryItemId: id } });
       await tx.inventoryItem.delete({ where: { id } });
+
+      await tx.auditLog.create({
+        data: {
+          restaurantId,
+          userId: req.user!.id,
+          action: `Deleted — Inventory Item '${existing.name}' by ${req.user!.name}`,
+          entityType: 'INVENTORY_ITEM',
+          entityId: id
+        }
+      });
     });
 
     res.json({ message: 'Deleted successfully' });
@@ -118,9 +156,14 @@ export const logInventory = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const updatedItem = await prisma.$transaction(async (tx) => {
-      const item = await tx.inventoryItem.update({
-        where: { id },
+    const result = await prisma.$transaction(async (tx) => {
+      // Atomic guard against negative stock for sales
+      const updateResult = await tx.inventoryItem.updateMany({
+        where: { 
+          id, 
+          restaurantId,
+          ...(data.changeAmount < 0 && { currentStock: { gte: Math.abs(data.changeAmount) } }) 
+        },
         data: {
           currentStock: {
             increment: data.changeAmount
@@ -128,6 +171,12 @@ export const logInventory = async (req: Request, res: Response, next: NextFuncti
           ...(data.reason === InventoryChangeReason.RESTOCK && { lastRestockedAt: new Date() })
         }
       });
+
+      if (updateResult.count === 0) {
+        throw new Error('INSUFFICIENT_STOCK');
+      }
+
+      const item = await tx.inventoryItem.findUniqueOrThrow({ where: { id } });
 
       await tx.inventoryLog.create({
         data: {
@@ -138,11 +187,25 @@ export const logInventory = async (req: Request, res: Response, next: NextFuncti
         }
       });
 
+      await tx.auditLog.create({
+        data: {
+          restaurantId,
+          userId,
+          action: `Logged ${data.reason} (${data.changeAmount > 0 ? '+' : ''}${data.changeAmount}) — Inventory Item '${existing.name}' by ${req.user!.name}`,
+          entityType: 'INVENTORY_ITEM',
+          entityId: id
+        }
+      });
+
       return item;
     });
 
-    res.json(updatedItem);
-  } catch (error) {
+    res.json(result);
+  } catch (error: any) {
+    if (error.message === 'INSUFFICIENT_STOCK') {
+      res.status(400).json({ error: 'Cannot log usage: Stock cannot go below zero' });
+      return;
+    }
     next(error);
   }
 };

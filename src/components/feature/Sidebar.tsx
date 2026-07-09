@@ -17,12 +17,13 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: 'ri-dashboard-3-line' },
+  { label: 'New POS Order', path: '/manual-order', icon: 'ri-add-box-line' },
   { label: 'Live Orders', path: '/orders', icon: 'ri-list-check-2' },
   { label: 'Menu Management', path: '/menu', icon: 'ri-restaurant-2-line' },
   { label: 'Tables', path: '/tables', icon: 'ri-layout-grid-line' },
   { label: 'Inventory', path: '/inventory', icon: 'ri-archive-line' },
   { label: 'Sales & Reports', path: '/reports', icon: 'ri-bar-chart-2-line' },
-  { label: 'Reconciliation', path: '/reconciliation', icon: 'ri-scales-3-line' },
+
   { label: 'Feedback', path: '/feedback', icon: 'ri-chat-smile-2-line' },
   { label: 'Staff', path: '/staff', icon: 'ri-team-line' },
   { label: 'Settings', path: '/settings', icon: 'ri-settings-3-line' },
@@ -85,8 +86,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         </button>
       </div>
 
-      <nav className={`flex-1 px-3 overflow-y-auto lg:overflow-visible ${collapsed && !mobileOpen ? 'py-2' : 'py-4'}`}>
-        <ul className={`flex flex-col ${collapsed && !mobileOpen ? 'gap-0.5' : 'gap-1'}`}>
+      <nav className={`flex-1 min-h-0 px-3 overflow-y-auto lg:overflow-visible ${collapsed && !mobileOpen ? 'py-2' : 'py-2.5'}`}>
+        <ul className={`flex flex-col ${collapsed && !mobileOpen ? 'gap-2' : 'gap-2'}`}>
           {mainNavItems.map((item) => {
             // Check if current user has permission to see this route
             if (user && !NAV_PERMISSIONS[item.path]?.includes(user.role)) {
@@ -99,7 +100,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                   to={item.path}
                   onClick={(e) => handleNav(e, item.path)}
                   className={({ isActive }) =>
-                    `w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap group relative ${collapsed && !mobileOpen ? 'justify-center w-9 h-9 mx-auto' : 'px-3 py-2 gap-3'
+                    `w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer whitespace-nowrap group relative ${collapsed && !mobileOpen ? 'justify-center w-9 h-9 mx-auto' : 'px-2.5 py-1.5 gap-2.5'
                     } ${isActive
                       ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 font-semibold'
                       : 'text-foreground-500 dark:text-foreground-400 hover:bg-background-100 dark:hover:bg-foreground-800 hover:text-foreground-800 dark:hover:text-foreground-200'
@@ -110,7 +111,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                     <>
                       <div className="w-5 h-5 flex items-center justify-center flex-shrink-0 relative">
                         <i className={`${item.icon} text-lg ${isActive ? 'text-primary-500 dark:text-primary-400' : ''}`}></i>
-                        {collapsed && !mobileOpen && badgeCount > 0 && (
+                        {collapsed && !mobileOpen && (badgeCount ?? 0) > 0 && (
                           <span className="absolute -top-2 -right-3 w-4 h-4 bg-primary-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                             {badgeCount}
                           </span>
@@ -119,7 +120,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                       {(!collapsed || mobileOpen) && (
                         <>
                           <span className="text-sm font-medium flex-1 text-left font-body">{item.label}</span>
-                          {badgeCount > 0 && (
+                          {(badgeCount ?? 0) > 0 && (
                             <span className="bg-primary-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
                               {badgeCount}
                             </span>
@@ -140,12 +141,12 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         </ul>
       </nav>
 
-      <div className={`border-t border-background-200 dark:border-foreground-800 flex flex-col gap-0.5 ${collapsed && !mobileOpen ? 'p-2' : 'p-3'}`}>
+      <div className={`border-t border-background-200 dark:border-foreground-800 flex flex-col gap-1.5 ${collapsed && !mobileOpen ? 'p-2' : 'p-2.5'}`}>
         <NavLink
           to="/profile"
           onClick={(e) => handleNav(e, '/profile')}
           className={({ isActive }) =>
-            `w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer group relative ${collapsed && !mobileOpen ? 'justify-center w-9 h-9 mx-auto' : 'px-3 py-2 gap-3'
+            `w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer group relative ${collapsed && !mobileOpen ? 'justify-center w-9 h-9 mx-auto' : 'px-2.5 py-1.5 gap-2.5'
             } ${isActive
               ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 font-semibold'
               : 'text-foreground-500 dark:text-foreground-400 hover:bg-background-100 dark:hover:bg-foreground-800 hover:text-foreground-800 dark:hover:text-foreground-200'
@@ -171,7 +172,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
 
         <button
           onClick={toggleTheme}
-          className={`w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer text-foreground-500 dark:text-foreground-400 hover:bg-background-100 dark:hover:bg-foreground-800 hover:text-foreground-800 dark:hover:text-foreground-200 group relative ${collapsed && !mobileOpen ? 'justify-center w-9 h-9 mx-auto' : 'px-3 py-2 gap-3'
+          className={`w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer text-foreground-500 dark:text-foreground-400 hover:bg-background-100 dark:hover:bg-foreground-800 hover:text-foreground-800 dark:hover:text-foreground-200 group relative ${collapsed && !mobileOpen ? 'justify-center w-9 h-9 mx-auto' : 'px-2.5 py-1.5 gap-2.5'
             }`}
         >
           <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
@@ -191,7 +192,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
 
         <button
           onClick={() => checkUnsaved(() => signOut())}
-          className={`w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 group relative ${collapsed && !mobileOpen ? 'justify-center w-9 h-9 mx-auto' : 'px-3 py-2 gap-3'
+          className={`w-full flex items-center rounded-lg transition-all duration-200 cursor-pointer text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 group relative ${collapsed && !mobileOpen ? 'justify-center w-9 h-9 mx-auto' : 'px-2.5 py-1.5 gap-2.5'
             }`}
         >
           <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">

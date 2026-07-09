@@ -17,6 +17,7 @@ export interface CartItem {
   selectedAddOns: { id: string; name: string; price: number }[];
   specialInstructions?: string;
   spiceLevel?: number;
+  prepTime?: number;
 }
 
 export type PaymentMethod = 'now' | 'cash' | null;

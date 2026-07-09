@@ -9,10 +9,11 @@ import { useRefresh } from '@/contexts/RefreshContext';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import { apiClient } from '@/api/client';
+import Toast from '@/pages/menu/components/Toast';
 
 export interface Table {
   id: string;
-  tableNumber: number;
+  tableNumber: string;
   capacity: number;
   qrCodeUrl: string | null;
   activeToken: string | null;
@@ -59,13 +60,14 @@ export default function Tables() {
   });
 
   const createTableMutation = useMutation({
-    mutationFn: async (data: { tableNumber: number, capacity: number }) => {
+    mutationFn: async (data: { tableNumber: string, capacity: number }) => {
       const res = await apiClient.post('/tables', data);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables'] });
       setShowAddModal(false);
+      markStepComplete("review_tables");
     }
   });
 
@@ -77,6 +79,28 @@ export default function Tables() {
       queryClient.invalidateQueries({ queryKey: ['tables'] });
       setSelectedTable(null);
       setShowDeleteConfirm(false);
+      setToast({ message: 'Table deleted successfully', type: 'success' });
+    },
+    onError: (err: any) => {
+      setToast({ message: err.response?.data?.error || 'Failed to delete table', type: 'error' });
+      setShowDeleteConfirm(false);
+    }
+  });
+
+  const updateTableMutation = useMutation({
+    mutationFn: async (data: { id: string, capacity: number }) => {
+      const res = await apiClient.put(`/tables/${data.id}`, { capacity: data.capacity });
+      return res.data;
+    },
+    onSuccess: (updatedTable) => {
+      queryClient.invalidateQueries({ queryKey: ['tables'] });
+      if (selectedTable?.id === updatedTable.id) {
+        setSelectedTable(prev => prev ? { ...prev, capacity: updatedTable.capacity } : null);
+      }
+      setToast({ message: 'Table capacity updated', type: 'success' });
+    },
+    onError: (err: any) => {
+      setToast({ message: err.response?.data?.error || 'Failed to update table', type: 'error' });
     }
   });
 
@@ -111,12 +135,9 @@ export default function Tables() {
 
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
 
   const { setUnsavedDiff, checkUnsaved } = useUnsavedChanges();
-
-  useEffect(() => {
-    markStepComplete("review_tables");
-  }, [markStepComplete]);
 
   useEffect(() => {
     const diffs: string[] = [];
@@ -132,11 +153,11 @@ export default function Tables() {
   const handleCloseEdit = () => checkUnsaved(() => { setUnsavedDiff([]); setSelectedTable(null); });
 
   const addTable = () => {
-    if (tables.some(t => t.tableNumber === newTableNum)) {
+    if (tables.some(t => t.tableNumber === String(newTableNum))) {
       setAddError(`Table ${newTableNum} already exists.`);
       return;
     }
-    createTableMutation.mutate({ tableNumber: newTableNum, capacity: newTableSeats });
+    createTableMutation.mutate({ tableNumber: String(newTableNum), capacity: newTableSeats });
   };
 
   const deleteTable = () => {
@@ -158,14 +179,30 @@ export default function Tables() {
     if (selectedTable) {
       navigator.clipboard.writeText(getQrLink(selectedTable));
       setCopied(true);
+      markStepComplete("review_tables");
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
   if (isRefreshing || isLoading) return <PageSkeleton />;
 
+  const downloadQR = () => {
+    if (!selectedTable) return;
+    const canvas = document.getElementById('qr-canvas') as HTMLCanvasElement;
+    if (canvas) {
+      const pngUrl = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+      const downloadLink = document.createElement("a");
+      downloadLink.href = pngUrl;
+      downloadLink.download = `Table-${selectedTable.tableNumber}-QR.png`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <PageHeader
         title="Tables"
         description={`Manage ${tables.length} tables and QR ordering codes`}
@@ -173,7 +210,7 @@ export default function Tables() {
         {!isStaff && (
           <button
             onClick={() => {
-              setNewTableNum(tables.length > 0 ? Math.max(...tables.map((t) => t.tableNumber)) + 1 : 1);
+              setNewTableNum(tables.length > 0 ? Math.max(...tables.map((t) => Number(t.tableNumber) || 0)) + 1 : 1);
               setNewTableSeats(4);
               setAddError('');
               setShowAddModal(true);
@@ -191,12 +228,37 @@ export default function Tables() {
         </div>
       )}
 
-      {/* Table Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {tables.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((table) => (
-          <TableTile key={table.id} table={table} onClick={(t) => { setSelectedTable(t); }} />
-        ))}
-      </div>
+      {/* Table Grid or Empty State */}
+      {tables.length === 0 && !isLoading && !isError ? (
+        <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-background-200 dark:border-foreground-800 rounded-2xl bg-white/50 dark:bg-foreground-900/50 mt-4">
+          <div className="w-24 h-24 mb-6 rounded-full bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center text-primary-500">
+            <i className="ri-layout-grid-fill text-4xl"></i>
+          </div>
+          <h3 className="text-xl font-bold font-heading text-foreground-900 dark:text-foreground-100 mb-2">No Tables Yet</h3>
+          <p className="text-foreground-500 max-w-md mb-8 font-body">
+            Start by adding tables to generate QR codes. Your customers will scan these codes to view your menu and place orders.
+          </p>
+          {!isStaff && (
+            <button
+              onClick={() => {
+                setNewTableNum(1);
+                setNewTableSeats(4);
+                setAddError('');
+                setShowAddModal(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-bold transition-all shadow-lg shadow-primary-500/20 hover:shadow-primary-500/40 hover:-translate-y-0.5"
+            >
+              <i className="ri-add-line text-lg"></i> Add Your First Table
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+          {tables.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((table) => (
+            <TableTile key={table.id} table={table} onClick={(t) => { setSelectedTable(t); }} />
+          ))}
+        </div>
+      )}
 
       {/* Pagination */}
       {tables.length > itemsPerPage && (
@@ -241,7 +303,7 @@ export default function Tables() {
       {selectedTable && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-foreground-950/40 backdrop-blur-sm" onClick={handleCloseEdit}></div>
-          <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-2xl w-full max-w-sm animate-scale-in flex flex-col">
+          <div className="relative bg-white dark:bg-foreground-900 rounded-xl border border-background-200 dark:border-foreground-700 shadow-2xl w-full max-w-md animate-scale-in flex flex-col">
 
             <div className="px-5 py-4 border-b border-background-200 dark:border-foreground-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -268,7 +330,31 @@ export default function Tables() {
               <div>
                 <label className="block text-xs font-semibold text-foreground-700 dark:text-foreground-300 uppercase tracking-wider mb-2 font-body">Table Seats</label>
                 <div className="flex items-center justify-between bg-background-50 dark:bg-foreground-800/50 p-3 rounded-lg border border-background-200 dark:border-foreground-700">
-                  <span className="text-2xl font-bold text-foreground-900 dark:text-foreground-100 font-heading w-12 text-center">{selectedTable.capacity}</span>
+                  <button
+                    onClick={() => {
+                      const newCap = Math.max(1, selectedTable.capacity - 1);
+                      setSelectedTable(prev => prev ? { ...prev, capacity: newCap } : null);
+                      updateTableMutation.mutate({ id: selectedTable.id, capacity: newCap });
+                    }}
+                    disabled={updateTableMutation.isPending}
+                    className="w-10 h-10 rounded-lg bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600 cursor-pointer shadow-sm transition-all disabled:opacity-50"
+                  >
+                    <i className="ri-subtract-line text-lg"></i>
+                  </button>
+                  <span className="text-2xl font-bold text-foreground-900 dark:text-foreground-100 font-heading w-12 text-center">
+                    {updateTableMutation.isPending ? '...' : selectedTable.capacity}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const newCap = Math.min(20, selectedTable.capacity + 1);
+                      setSelectedTable(prev => prev ? { ...prev, capacity: newCap } : null);
+                      updateTableMutation.mutate({ id: selectedTable.id, capacity: newCap });
+                    }}
+                    disabled={updateTableMutation.isPending}
+                    className="w-10 h-10 rounded-lg bg-white dark:bg-foreground-700 border border-background-200 dark:border-foreground-600 flex items-center justify-center text-foreground-600 dark:text-foreground-300 hover:bg-background-50 dark:hover:bg-foreground-600 cursor-pointer shadow-sm transition-all disabled:opacity-50"
+                  >
+                    <i className="ri-add-line text-lg"></i>
+                  </button>
                 </div>
               </div>
 
@@ -278,16 +364,26 @@ export default function Tables() {
                   QR Ordering Link
                 </h3>
                 <div className="bg-background-50 dark:bg-foreground-800/50 rounded-lg border border-background-200 dark:border-foreground-700 p-5 flex flex-col items-center gap-4">
-                  <div className="w-48 h-48 bg-white rounded-lg p-2 flex items-center justify-center shadow-sm">
+                  <div className="w-48 h-48 bg-white rounded-lg p-2 flex items-center justify-center shadow-sm relative group">
                     {selectedTable.activeToken ? (
-                      <QRCodeCanvas
-                        value={getQrLink(selectedTable)}
-                        size={176}
-                        bgColor="#FFFFFF"
-                        fgColor="#1A1B1F"
-                        level="M"
-                        includeMargin={false}
-                      />
+                      <>
+                        <QRCodeCanvas
+                          id="qr-canvas"
+                          value={getQrLink(selectedTable)}
+                          size={176}
+                          bgColor="#FFFFFF"
+                          fgColor="#1A1B1F"
+                          level="M"
+                          includeMargin={false}
+                        />
+                        <button 
+                          onClick={downloadQR}
+                          className="absolute inset-0 bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer"
+                        >
+                          <i className="ri-download-2-line text-2xl mb-1"></i>
+                          <span className="text-xs font-medium">Download PNG</span>
+                        </button>
+                      </>
                     ) : (
                       <span className="text-foreground-400 text-sm text-center">No active token</span>
                     )}

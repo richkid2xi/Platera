@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 interface ToastProps {
   message: string;
-  type: 'success' | 'info' | 'warning';
+  type: 'success' | 'info' | 'warning' | 'error';
   onClose: () => void;
   duration?: number;
 }
@@ -17,12 +17,14 @@ export default function Toast({ message, type, onClose, duration = 3000 }: Toast
     success: 'ri-checkbox-circle-line text-secondary-500',
     info: 'ri-information-line text-primary-500',
     warning: 'ri-alert-line text-accent-500',
+    error: 'ri-error-warning-line text-red-500',
   };
 
   const bgMap = {
     success: 'border-secondary-200 dark:border-secondary-800',
     info: 'border-primary-200 dark:border-primary-800',
     warning: 'border-accent-200 dark:border-accent-800',
+    error: 'border-red-200 dark:border-red-800',
   };
 
   return (

@@ -9,6 +9,7 @@ declare global {
         restaurantId: string;
         role: Role;
         status: Status;
+        name: string;
       };
     }
   }

@@ -14,14 +14,24 @@ export const apiClient = axios.create({
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // If the server is completely unreachable (CORS, offline, server down), there's no response.
     if (!error.response) {
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
         const friendlyError = new Error('Server cannot be reached. Please check your connection or try again later.');
         (friendlyError as any).isNetworkError = true;
+        
+        window.dispatchEvent(new CustomEvent('global:toast', {
+          detail: { message: 'Server cannot be reached.', type: 'error' }
+        }));
+        
         return Promise.reject(friendlyError);
       }
       return Promise.reject(error);
+    }
+
+    if (error.response.status >= 500) {
+      window.dispatchEvent(new CustomEvent('global:toast', {
+        detail: { message: 'An unexpected server error occurred.', type: 'error' }
+      }));
     }
 
     if (error.response.status === 401) {

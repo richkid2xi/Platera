@@ -3,6 +3,7 @@ import prisma from '../utils/prisma';
 import { createOrderSchema } from '../utils/schemas';
 import { OrderSource } from '@prisma/client';
 import { emitToRestaurant } from '../websocket/socket';
+import { deductInventoryForOrder } from '../services/inventoryService';
 import sanitizeHtml from 'sanitize-html';
 import { menuCache } from '../utils/cache';
 import { createOrderInternal } from '../services/orderService';
@@ -85,6 +86,8 @@ export const resolveToken = async (req: Request, res: Response, next: NextFuncti
         name: restaurant.name,
         logoUrl: restaurant.logoUrl,
         paystackPublicKey: restaurant.paystackPublicKey,
+        paymentSettings: restaurant.paymentSettings,
+        appearanceSettings: restaurant.appearanceSettings,
       },
       table: {
         id: table.id,
@@ -126,6 +129,11 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
     emitToRestaurant(restaurantId, 'order:new', order);
 
     res.status(201).json(order);
+
+    // Asynchronously deduct inventory
+    deductInventoryForOrder(prisma, order.id, restaurantId).catch((err) => {
+      console.error(`Failed to deduct inventory for order ${order.id}:`, err);
+    });
   } catch (error) {
     next(error);
   }

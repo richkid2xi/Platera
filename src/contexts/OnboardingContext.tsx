@@ -23,7 +23,7 @@ const DEFAULT_STATE: OnboardingState = {
 };
 
 const getStorageKey = (restaurantId: string | undefined) => 
-  `platera_onboarding_state_${restaurantId || "guest"}`;
+  `platera_onboarding_v2_${restaurantId || "guest"}`;
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const { restaurant } = useAuth();

@@ -7,6 +7,7 @@ import {
   updateMenuItemSchema, 
   updateMenuAvailabilitySchema 
 } from '../utils/schemas';
+import { logAction } from '../utils/auditLogger';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../config/env';
 import { menuCache } from '../utils/cache';
@@ -21,6 +22,14 @@ const supabase = createClient(
 export const getMenu = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const restaurantId = req.user!.restaurantId;
+    const cacheKey = `menu_${restaurantId}`;
+
+    // Serve from cache if available
+    const cached = menuCache.get(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
 
     const categories = await prisma.menuCategory.findMany({
       where: { restaurantId },
@@ -61,6 +70,9 @@ export const getMenu = async (req: Request, res: Response, next: NextFunction): 
       }))
     }));
 
+    // Store in cache
+    menuCache.set(cacheKey, serializedMenu);
+
     res.json(serializedMenu);
   } catch (error) {
     next(error);
@@ -80,6 +92,14 @@ export const createCategory = async (req: Request, res: Response, next: NextFunc
       }
     });
     
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Created — Category '${category.name}' by ${req.user!.name}`,
+      entityType: 'MenuCategory',
+      entityId: category.id
+    });
+
     menuCache.del(`menu_${restaurantId}`);
 
     res.status(201).json(category);
@@ -105,6 +125,14 @@ export const updateCategory = async (req: Request, res: Response, next: NextFunc
       data
     });
     
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Updated — Category '${updated.name}' by ${req.user!.name}`,
+      entityType: 'MenuCategory',
+      entityId: updated.id
+    });
+
     menuCache.del(`menu_${restaurantId}`);
 
     res.json(updated);
@@ -125,6 +153,17 @@ export const deleteCategory = async (req: Request, res: Response, next: NextFunc
     }
 
     await prisma.menuCategory.delete({ where: { id } });
+
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Deleted — Category '${category.name}' by ${req.user!.name}`,
+      entityType: 'MenuCategory',
+      entityId: category.id
+    });
+    
+    menuCache.del(`menu_${restaurantId}`);
+
     res.json({ message: 'Deleted successfully' });
   } catch (error) {
     next(error);
@@ -164,6 +203,16 @@ export const createMenuItem = async (req: Request, res: Response, next: NextFunc
       include: { variants: true, addOns: true }
     });
     
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Created — Menu Item '${item.name}' by ${req.user!.name}`,
+      entityType: 'MenuItem',
+      entityId: item.id
+    });
+
+    menuCache.del(`menu_${restaurantId}`);
+
     // Serialize
     res.status(201).json({
       ...item,
@@ -219,6 +268,19 @@ export const updateMenuItem = async (req: Request, res: Response, next: NextFunc
       });
     });
     
+    const priceChanged = data.price !== undefined && Number(item.price) !== data.price;
+    const actionDesc = priceChanged 
+      ? `Menu item '${updated.name}' price changed from GHS ${item.price} to GHS ${data.price} by ${req.user!.name}`
+      : `Updated — Menu Item '${updated.name}' by ${req.user!.name}`;
+
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: actionDesc,
+      entityType: 'MenuItem',
+      entityId: updated.id
+    });
+    
     menuCache.del(`menu_${restaurantId}`);
 
     res.json({
@@ -245,6 +307,14 @@ export const updateMenuAvailability = async (req: Request, res: Response, next: 
     const updated = await prisma.menuItem.update({
       where: { id },
       data: { available: data.available }
+    });
+    
+    await logAction({
+      restaurantId,
+      userId: req.user!.id,
+      action: `Availability toggled to ${updated.available ? 'Available' : 'Unavailable'} — Menu Item '${updated.name}' by ${req.user!.name}`,
+      entityType: 'MenuItem',
+      entityId: updated.id
     });
     
     menuCache.del(`menu_${restaurantId}`);
@@ -300,7 +370,7 @@ export const uploadMenuImage = async (req: Request, res: Response, next: NextFun
 
     const { data, error } = await supabase
       .storage
-      .from('menu-images')
+      .from('pictures')
       .upload(fileName, req.file.buffer, {
         contentType: req.file.mimetype,
         upsert: true
@@ -312,7 +382,7 @@ export const uploadMenuImage = async (req: Request, res: Response, next: NextFun
 
     const { data: { publicUrl } } = supabase
       .storage
-      .from('menu-images')
+      .from('pictures')
       .getPublicUrl(fileName);
 
     await prisma.menuItem.update({

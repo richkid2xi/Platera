@@ -1,26 +1,34 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import PageHeader from '@/components/base/PageHeader';
 import PageSkeleton from '@/components/base/PageSkeleton';
 import CustomSelect from '@/components/base/CustomSelect';
 import { useRefresh } from '@/contexts/RefreshContext';
 import { apiClient } from '@/api/client';
-import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 export default function AuditLog() {
   const { isRefreshing } = useRefresh();
-  const [logs, setLogs] = useState<any[]>([]);
   const [filterType, setFilterType] = useState('All Events');
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  useEffect(() => {
-    apiClient.get('/audit-logs')
-      .then(res => setLogs(res.data))
-      .catch(console.error);
-  }, [isRefreshing]);
+  const { data: rawLogs = [], isLoading } = useQuery({
+    queryKey: ['audit-logs'],
+    queryFn: async () => {
+      const res = await apiClient.get('/audit-logs');
+      return res.data;
+    }
+  });
 
-  const filteredLogs = logs.filter(log => {
+  const logs = useMemo(() => {
+    return rawLogs.map((l: any) => ({
+      ...l,
+      user: l.user || { name: 'System', role: 'SYSTEM' }
+    }));
+  }, [rawLogs]);
+
+  const filteredLogs = logs.filter((log: any) => {
     const actorName = log.user?.name || 'System';
     const matchesSearch = log.action.toLowerCase().includes(search.toLowerCase()) ||
       actorName.toLowerCase().includes(search.toLowerCase());
@@ -47,7 +55,7 @@ export default function AuditLog() {
     });
   };
 
-  if (isRefreshing) return <PageSkeleton />;
+  if (isRefreshing || isLoading) return <PageSkeleton />;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -94,7 +102,7 @@ export default function AuditLog() {
               </tr>
             </thead>
             <tbody className="divide-y divide-background-100 dark:divide-foreground-800/50">
-              {filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log) => (
+              {filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log: any) => (
                 <tr key={log.id} className="hover:bg-background-50/50 dark:hover:bg-foreground-800/30 transition-colors group">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-sm text-foreground-600 dark:text-foreground-400 font-body block">{formatDate(log.timestamp).split(', ')[0]}, {formatDate(log.timestamp).split(', ')[1]}</span>

@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { apiClient } from "@/api/client";
+import { injectThemeColor } from "@/utils/theme";
 
 export type UserRole = "OWNER" | "MANAGER" | "STAFF";
 
@@ -15,6 +16,8 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   restaurantId: string;
+  phone?: string;
+  avatarUrl?: string | null;
 }
 
 export interface Restaurant {
@@ -55,6 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiClient.get("/auth/me");
       setUser(res.data.user);
       setRestaurant(res.data.restaurant);
+      if (res.data.restaurant?.appearanceSettings?.primaryColor) {
+        injectThemeColor(res.data.restaurant.appearanceSettings.primaryColor);
+      }
     } catch (err) {
       setUser(null);
       setRestaurant(null);
@@ -81,10 +87,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiClient.post("/auth/login", { email, password });
       setUser(res.data.user);
       setRestaurant(res.data.restaurant);
-    } finally {
-      // Small artificial delay just for the UI shutter animation
-      setTimeout(() => setIsSettingUp(false), 1500);
+      if (res.data.restaurant?.appearanceSettings?.primaryColor) {
+        injectThemeColor(res.data.restaurant.appearanceSettings.primaryColor);
+      }
+    } catch (err) {
+      setIsSettingUp(false);
+      throw err; // Re-throw so SignIn page can display the error
     }
+    // Small artificial delay just for the UI shutter animation
+    setTimeout(() => setIsSettingUp(false), 1500);
   };
 
   const signUp = async (payload: any) => {
@@ -103,20 +114,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       setUser(res.data.user);
       setRestaurant(res.data.restaurant);
-    } finally {
-      setTimeout(() => setIsSettingUp(false), 1500);
+    } catch (err) {
+      setIsSettingUp(false);
+      throw err; // Re-throw so SignUp page can display the error
     }
+    setTimeout(() => setIsSettingUp(false), 1500);
   };
 
   const signOut = async () => {
     setIsLoggingOut(true);
     try {
       await apiClient.post("/auth/logout");
+    } catch {
+      // Ignore logout errors — the session cookie will expire naturally
+    } finally {
       setUser(null);
       setRestaurant(null);
-    } catch (err) {
-      console.error("Logout error", err);
-    } finally {
       setIsLoggingOut(false);
     }
   };

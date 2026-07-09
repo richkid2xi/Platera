@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useUnsavedChanges } from '@/contexts/UnsavedChangesContext';
 import type { MenuItem } from '@/types/menu';
+import CustomSelect from '@/components/base/CustomSelect';
 
 interface AddEditModalProps {
   isOpen: boolean;
@@ -150,8 +151,7 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
     setAddOns(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
+  const handleCategoryChange = (val: string) => {
     if (val === 'custom') {
       setIsCustomCategory(true);
       setForm({ ...form, category: 'custom' });
@@ -339,20 +339,16 @@ export default function AddEditModal({ isOpen, onClose, onSave, editItem, catego
                     </button>
                   </div>
                 ) : (
-                  <div className="relative">
-                    <select
+                  <div className="relative z-50">
+                    <CustomSelect
                       value={form.category}
                       onChange={handleCategoryChange}
-                      className="w-full appearance-none px-3 py-2.5 rounded-lg border border-background-200 dark:border-foreground-700 bg-white dark:bg-foreground-900 text-sm text-foreground-900 dark:text-foreground-100 focus:outline-none focus:border-primary-300 dark:focus:border-primary-600 font-body cursor-pointer transition-shadow"
-                    >
-                      {categories.map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                      <option value="custom" className="font-semibold text-primary-500">
-                        + Add Custom Category...
-                      </option>
-                    </select>
-                    <i className="ri-arrow-down-s-line absolute right-3 top-1/2 -translate-y-1/2 text-foreground-400 pointer-events-none"></i>
+                      options={[
+                        ...categories.map(cat => ({ label: cat, value: cat })),
+                        { label: '+ Add Custom Category...', value: 'custom' }
+                      ]}
+                      className="w-full text-sm font-body cursor-pointer transition-shadow"
+                    />
                   </div>
                 )}
               </div>

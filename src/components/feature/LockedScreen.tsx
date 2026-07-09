@@ -2,7 +2,7 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { formatDate } from '@/utils/subscription';
 
 export default function LockedScreen() {
-  const { subscription, openPaymentModal } = useSubscription();
+  const { subscription, initializePayment } = useSubscription();
 
   if (subscription.status !== 'locked') return null;
 
@@ -60,11 +60,11 @@ export default function LockedScreen() {
             </p>
           </div>
           <button
-            onClick={openPaymentModal}
-            className="w-full py-3.5 rounded-xl bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-bold text-sm shadow-lg shadow-primary-500/30 transition-all flex items-center justify-center gap-2"
+            onClick={initializePayment}
+            className="w-full py-3 bg-primary-500 hover:bg-primary-600 text-white font-bold rounded-xl shadow-lg shadow-primary-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            <i className="ri-rocket-2-line" />
-            Renew Now — Get back in
+            <i className="ri-shield-check-line text-lg" />
+            Renew Subscription
           </button>
         </div>
 

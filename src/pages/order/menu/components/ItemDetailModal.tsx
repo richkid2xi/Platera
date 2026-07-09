@@ -55,6 +55,7 @@ export default function ItemDetailModal({ item, onClose }: Props) {
         selectedAddOns,
         specialInstructions,
         spiceLevel,
+        prepTime: item.prepTime,
       }
     });
     setAddedAnimation(true);

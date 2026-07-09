@@ -9,7 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import { env } from './config/env';
 import rateLimit from 'express-rate-limit';
 import pinoHttp from 'pino-http';
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import authRoutes from './routes/authRoutes';
 import staffRoutes from './routes/staffRoutes';
 import menuRoutes from './routes/menuRoutes';
@@ -45,7 +45,7 @@ const app = express();
 
 // Request UUID and Logging
 app.use((req, res, next) => {
-  req.id = uuidv4();
+  req.id = crypto.randomUUID();
   next();
 });
 

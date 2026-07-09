@@ -16,6 +16,7 @@ interface MenuItem {
   popular: boolean;
   available: boolean;
   spiceLevel?: number;
+  prepTime?: number;
   addOns: AddOn[];
 }
 

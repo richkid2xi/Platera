@@ -39,7 +39,7 @@ Sentry.init({
 
 import app from './app';
 
-const PORT = env.PORT || 8000;
+const PORT = Number(env.PORT) || 5000;
 
 // Set up HTTP Server
 const server = http.createServer(app);
@@ -56,8 +56,8 @@ Sentry.setupExpressErrorHandler(app);
 startSubscriptionCron();
 
 // Start Server
-const serverInstance = server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+const serverInstance = server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is listening on 0.0.0.0:${PORT}`);
 });
 
 // Graceful Shutdown

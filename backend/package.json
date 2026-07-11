@@ -17,6 +17,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@sentry/node": "^10.63.0",

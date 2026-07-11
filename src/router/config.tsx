@@ -1,3 +1,4 @@
+import { Navigate } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
 import NotFound from "../pages/NotFound";
 import Layout from "../components/feature/Layout";
@@ -49,6 +50,7 @@ const routes: RouteObject[] = [
       { path: "payment", element: <CustomerPayment /> },
       { path: "order-status", element: <CustomerOrderStatus /> },
       { path: "feedback", element: <CustomerFeedback /> },
+      { path: "*", element: <Navigate to="menu" replace /> },
     ],
   },
 

@@ -1,8 +1,10 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function NotFound() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   
   return (
     <div className="min-h-screen bg-background-50 dark:bg-foreground-950 flex flex-col items-center justify-center px-4 font-body relative overflow-hidden animate-fade-in">
@@ -44,13 +46,23 @@ export default function NotFound() {
             <i className="ri-arrow-left-line"></i>
             Go Back
           </button>
-          <button 
-            onClick={() => navigate('/dashboard')}
-            className="px-6 py-3 rounded-xl bg-primary-500 text-white font-semibold hover:bg-primary-600 shadow-lg shadow-primary-500/30 transition-all flex items-center justify-center gap-2 hover-lift"
-          >
-            <i className="ri-dashboard-line"></i>
-            Back to Dashboard
-          </button>
+          {isAuthenticated ? (
+            <button 
+              onClick={() => navigate('/dashboard')}
+              className="px-6 py-3 rounded-xl bg-primary-500 text-white font-semibold hover:bg-primary-600 shadow-lg shadow-primary-500/30 transition-all flex items-center justify-center gap-2 hover-lift"
+            >
+              <i className="ri-dashboard-line"></i>
+              Back to Dashboard
+            </button>
+          ) : (
+            <button 
+              onClick={() => navigate('/')}
+              className="px-6 py-3 rounded-xl bg-primary-500 text-white font-semibold hover:bg-primary-600 shadow-lg shadow-primary-500/30 transition-all flex items-center justify-center gap-2 hover-lift"
+            >
+              <i className="ri-home-line"></i>
+              Go to Home
+            </button>
+          )}
         </div>
       </div>
       

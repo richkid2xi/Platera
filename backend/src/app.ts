@@ -88,6 +88,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "https://js.paystack.co"],
       frameSrc: ["'self'", "https://checkout.paystack.com"],
       imgSrc: ["'self'", "data:", "https://*.supabase.co"],
+      fontSrc: ["'self'", "data:"],
     }
   },
   hsts: {

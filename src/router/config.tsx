@@ -37,6 +37,8 @@ const routes: RouteObject[] = [
   { path: "/auth/signin", element: <SignIn /> },
   { path: "/auth/signup", element: <SignUp /> },
   { path: "/auth/forgot-password", element: <ForgotPassword /> },
+  { path: "/sign-up", element: <SignUp /> },
+  { path: "/sign-in", element: <SignIn /> },
   { path: "/terms", element: <Terms /> },
   { path: "/privacy", element: <Privacy /> },
   {
